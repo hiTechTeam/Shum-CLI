@@ -315,7 +315,9 @@ def main():
   depends_on macos: :{macos_name}
 
   def install
-    prefix.install "Shum.app"
+    app = buildpath/"Shum.app"
+    app = buildpath unless app.directory?
+    (prefix/"Shum.app").install app/"Contents"
     bin.install_symlink prefix/"Shum.app/Contents/MacOS/shum"
   end
 

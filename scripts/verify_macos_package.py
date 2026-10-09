@@ -76,7 +76,8 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
     formula = (package.parent / "homebrew-shum/Formula/shum.rb").read_text()
     assert hashlib.sha256(archive.read_bytes()).hexdigest() in formula
     assert "depends_on arch:" not in formula
-    assert 'prefix.install "Shum.app"' in formula
+    assert 'app = buildpath unless app.directory?' in formula
+    assert '(prefix/"Shum.app").install app/"Contents"' in formula
     assert 'bin.install_symlink prefix/"Shum.app/Contents/MacOS/shum"' in formula
     assert 'homepage "https://github.com/hiTechTeam/Shum-CLI"' in formula
     assert 'Перед удалением: shum daemon --uninstall' in formula

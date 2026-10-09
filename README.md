@@ -32,6 +32,8 @@ GATT-сервер на Linux/Windows и фото-аватары не реали�
 не меняются.
 
 Свежие результаты синхронизации и проверки: [docs/sync-verification.md](docs/sync-verification.md).
+Опубликованный 0.1.6, реальное обновление Homebrew и проверки удаления:
+[docs/release-verification.md](docs/release-verification.md).
 
 Документация ядра: [API](https://github.com/hiTechTeam/Shum-Core/blob/main/docs/core-api.md)
 и [хранилище](https://github.com/hiTechTeam/Shum-Core/blob/main/docs/storage.md).
