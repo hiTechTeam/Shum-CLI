@@ -5,6 +5,7 @@ Usage: command_colors.py PATH_TO_SHUM
 """
 import copy
 import fcntl
+import hashlib
 import json
 import os
 import pathlib
@@ -56,14 +57,16 @@ with tempfile.TemporaryDirectory(prefix="shum-command-colors-") as directory:
     anna.pop("avatarSeed", None)  # Text-command tests do not negotiate native images.
     card = copy.deepcopy(created["card"])
     card.pop("avatarSeed", None)
-    snapshot = {"profile": own, "card": card, "relays": ["wss://test.invalid"],
+    snapshot = {"build": {"version": subprocess.check_output([binary, "--version"], text=True).strip().split()[1],
+                          "sha256": hashlib.sha256(pathlib.Path(binary).read_bytes()).hexdigest()},
+                "clientCommandVersion": 2, "profile": own, "card": card, "relays": ["wss://test.invalid"],
                 "bluetooth": {"enabled": True, "scan": "scanning", "advertise": "advertising"},
                 "pushConfigured": False,
-                "contacts": [{"id": "anna", "card": anna, "nearby": True, "distance": 3,
+                "contacts": [{"id": "a" * 64, "card": anna, "nearby": True, "distance": 3,
                               "unread": 1, "phase": "accepted"},
-                             {"id": "igor", "card": {"name": "Игорь"}, "unread": 0,
+                             {"id": "b" * 64, "card": {"name": "Игорь"}, "unread": 0,
                               "phase": "incomingPending", "nearby": False}],
-                "messages": [{"id": "one", "contactID": "anna", "text": "Привет, проверяем цвета!",
+                "messages": [{"id": "one", "contactID": "a" * 64, "text": "Привет, проверяем цвета!",
                               "timestamp": int(time.time() * 1000)}]}
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
@@ -133,7 +136,7 @@ with tempfile.TemporaryDirectory(prefix="shum-command-colors-") as directory:
     termios_size = termios.TIOCSWINSZ
     try:
         cases = [["chats"], ["nearby"], ["status"], ["about"], ["contacts"],
-                 ["profile"], ["profile", "list"], ["keys", "verify", "Аня"], ["--help"]]
+                 ["profile"], ["profile", "list"], ["keys", "verify", "a" * 64], ["--help"]]
         for program in ["Apple_Terminal", "WarpTerminal"]:
             for args in cases:
                 raw = capture(args, program)

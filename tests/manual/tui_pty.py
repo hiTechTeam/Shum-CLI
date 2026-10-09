@@ -162,13 +162,13 @@ try:
     t=Terminal('-p',aid);t.expect('Пока нет чатов');t.send('\x10');t.expect('Создать новый профиль');t.send('\x1b[B\x1b[B\r');t.expect('Как вас зовут?');t.send('\x1b');t.expect('Пока нет чатов');t.exit('\x11')
     assert len(cli('profile','list')['profiles'])==2;print('PASS profile chooser and cancelled new profile')
     cli('-p',aid,'add',b['invitation'])
-    t=Terminal('-p',aid,'ui','Друг');t.expect('Сообщение');t.send('qiйшаф123');t.expect('qiйшаф123');t.send('\x1b');t.send('i');t.expect('Мой QR');t.send('\x1b');t.exit('q')
+    t=Terminal('-p',aid,'ui',b['profile']['ownerId']);t.expect('Сообщение');t.send('qiйшаф123');t.expect('qiйшаф123');t.send('\x1b');t.send('i');t.expect('Мой QR');t.send('\x1b');t.exit('q')
     assert cli('-p',aid,'status')['messages']==[];print('PASS editing does not execute q/i shortcuts')
     # Real native-image output must erase the old graphics before switching chats.
     c=cli('--relay','ws://127.0.0.1:9','--push-url','off','init','--headless','--name','Второй')
     cli('-p',aid,'add',c['invitation'])
     for program in ['iTerm.app','WarpTerminal']:
-        t=Terminal('-p',aid,'ui','Друг',images=program);t.expect('Сообщение')
+        t=Terminal('-p',aid,'ui',b['profile']['ownerId'],images=program);t.expect('Сообщение')
         marker=b'_Ga=T,' if program=='WarpTerminal' else b']1337;File='
         assert marker in t.raw
         assert b'\x1b[6n' not in t.raw, 'redraw must not wait for a cursor-position response'
@@ -187,8 +187,8 @@ try:
                     active.add(ident)
                     assert len(active)<=3, 'stale images accumulated across chats'
             return active
-        for name in ['Второй','Друг','Второй']:
-            t.send('\x1b'); t.send('/open '+name)
+        for contact_id in [c['profile']['ownerId'], b['profile']['ownerId'], c['profile']['ownerId']]:
+            t.send('\x1b'); t.send('/open '+contact_id)
             before=len(t.raw);t.send('\r');t.expect('Сообщение')
             changed=t.raw[before:]
             assert b'\x1b[2J' in changed

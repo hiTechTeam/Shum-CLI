@@ -1,5 +1,5 @@
 use crate::display::{Colors, Display, ACCENT, LOGO, LOGO_COLOR, MUTED};
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use ratatui::style::Color;
 use serde_json::Value;
 use std::{
@@ -101,21 +101,20 @@ pub fn fingerprint(card: &shum_core::card::Card) -> String {
     format!("{} {} {}", &id[..4], &id[4..8], &id[8..12])
 }
 pub fn find_contact<'a>(snapshot: &'a Value, selector: &str) -> Result<&'a Value> {
-    let matches = snapshot["contacts"]
+    let contacts = snapshot["contacts"]
         .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|c| {
-            c["id"] == selector
-                || c["card"]["name"] == selector
-                || (selector.len() >= 8 && text(&c["id"]).starts_with(selector))
-        })
-        .collect::<Vec<_>>();
-    match matches.as_slice() {
-        [one] => Ok(one),
-        [] => bail!("Контакт не найден"),
-        _ => bail!("Несколько контактов с этим именем. Укажите Shum ID"),
-    }
+        .context("Контактов пока нет")?;
+    let id = crate::contact::resolve(
+        selector,
+        contacts
+            .iter()
+            .map(|c| (text(&c["id"]), text(&c["card"]["nostrKey"]))),
+    )?
+    .context("Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.")?;
+    contacts
+        .iter()
+        .find(|c| c["id"] == id)
+        .context("Контакт не найден")
 }
 pub fn print_qr(content: &str, ascii: bool) -> Result<()> {
     let code = qr(content, ascii)?;
@@ -282,6 +281,11 @@ pub fn profile(snapshot: &Value, ascii: bool) {
         palette.paint(Tone::Command, fingerprint),
         palette.paint(Tone::Muted, "Shum ID   "),
         palette.paint(Tone::Command, safe(text(&snapshot["profile"]["ownerId"]))));
+    println!(
+        "  {} {}",
+        palette.paint(Tone::Muted, "Сетевой ID"),
+        palette.paint(Tone::Command, safe(text(&card["nostrKey"])))
+    );
 }
 pub fn chats(snapshot: &Value, nearby: bool, invites: bool, unread: bool, ascii: bool) {
     print!(
@@ -426,7 +430,7 @@ pub fn render_chats(
             output,
             "  {} {}",
             palette.paint(Tone::Muted, "Принять:"),
-            palette.paint(Tone::Command, "shum accept <имя>")
+            palette.paint(Tone::Command, "shum accept <ID>")
         )
         .unwrap();
     }

@@ -97,9 +97,42 @@ pub async fn request(root: &Path, id: &str, request: Request) -> Result<Value> {
     Ok(response["ok"].clone())
 }
 pub async fn ensure(root: &Path, id: &str) -> Result<()> {
-    if request(root, id, Request::Snapshot).await.is_ok() {
-        return Ok(());
+    let _control = crate::service::control_lock(root).await?;
+    let own = crate::identity::current()?.clone();
+    let snapshot = request(root, id, Request::Snapshot).await.ok();
+    if let Some(snapshot) = &snapshot {
+        if snapshot["clientCommandVersion"] == crate::runtime::COMMAND_SCHEMA_VERSION
+            && crate::identity::matches(snapshot, &own)
+        {
+            return Ok(());
+        }
+        if snapshot["clientCommandVersion"]
+            .as_u64()
+            .is_some_and(|v| v > crate::runtime::COMMAND_SCHEMA_VERSION)
+        {
+            bail!("Обновите CLI: запущена более новая служба.");
+        }
     }
+    #[cfg(target_os = "macos")]
+    let build = crate::macos::service_build(root)?;
+    #[cfg(not(target_os = "macos"))]
+    let build = own;
+    if let Some(snapshot) = snapshot {
+        match snapshot["clientCommandVersion"].as_u64() {
+            Some(version)
+                if version == crate::runtime::COMMAND_SCHEMA_VERSION
+                    && crate::identity::matches(&snapshot, &build) =>
+            {
+                return Ok(())
+            }
+            Some(version) if version > crate::runtime::COMMAND_SCHEMA_VERSION => {
+                bail!("Обновите CLI: запущена более новая служба.")
+            }
+            // Gracefully checkpoint the old service before loading the new command contract.
+            _ => stop(root, id).await?,
+        }
+    }
+    stop(root, id).await?;
     if root.join(id).join("locked").exists() {
         bail!("Профиль заблокирован. Выполните shum unlock.");
     }
@@ -114,7 +147,11 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         drop(log);
-        crate::macos::launch(root, id)?;
+        if crate::service::is_installed(root, id)? {
+            crate::service::install(root, id)?;
+        } else {
+            crate::macos::launch(root, id)?;
+        }
     }
     #[cfg(not(target_os = "macos"))]
     let mut child = {
@@ -147,15 +184,22 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
     // to approve Keychain access for the app's new code identity.
     let startup_seconds = if cfg!(target_os = "macos") { 60 } else { 10 };
     for _ in 0..startup_seconds * 10 {
-        if request(root, id, Request::Snapshot).await.is_ok() {
-            return Ok(());
+        if let Ok(snapshot) = request(root, id, Request::Snapshot).await {
+            if snapshot["clientCommandVersion"] == crate::runtime::COMMAND_SCHEMA_VERSION
+                && crate::identity::matches(&snapshot, &build)
+            {
+                return Ok(());
+            }
+            bail!("Версия службы не соответствует CLI. Перезапустите службу.");
         }
         #[cfg(not(target_os = "macos"))]
         if child.try_wait()?.is_some() {
             // Another CLI may have won the exclusive profile lock while starting.
             tokio::time::sleep(Duration::from_millis(200)).await;
-            if request(root, id, Request::Snapshot).await.is_ok() {
-                return Ok(());
+            if let Ok(snapshot) = request(root, id, Request::Snapshot).await {
+                if crate::identity::matches(&snapshot, &build) {
+                    return Ok(());
+                }
             }
             bail!(
                 "Служба завершилась. Диагностика: {}",
@@ -175,10 +219,18 @@ pub async fn stop(root: &Path, id: &str) -> Result<()> {
     }
     if let Err(error) = request(root, id, Request::Stop).await {
         // Only an acquired database lock proves that an endpoint is stale.
-        let profiles = Profiles::new(root)?;
-        let open = profiles.open(Some(id)).map_err(|_| error)?;
-        let _ = fs::remove_file(endpoint(root, id));
-        drop(open);
+        let lock_path = root.join(id).join("messages.sqlite.lock");
+        let metadata = fs::symlink_metadata(&lock_path)?;
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            bail!("Недействительная блокировка базы профиля");
+        }
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(|_| anyhow!("{error}"))?;
+        fs2::FileExt::try_lock_exclusive(&lock).map_err(|_| error)?;
+        fs::remove_file(endpoint(root, id))?;
         return Ok(());
     }
     for _ in 0..50 {

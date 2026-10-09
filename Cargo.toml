@@ -11,11 +11,12 @@ name = "shum"
 path = "src/main.rs"
 
 [dependencies]
-shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
-shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
-shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
-shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
+shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
+shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
+shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
+shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
 anyhow = "1"
+fs2 = "0.4.3"
 base64 = "0.22.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive", "env"] }

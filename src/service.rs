@@ -11,6 +11,11 @@ fn run(command: &mut Command) -> Result<()> {
     Ok(())
 }
 pub fn install(root: &Path, id: &str) -> Result<()> {
+    if !profile_id(id) {
+        bail!("Недействительный ID профиля");
+    }
+    let root = root.canonicalize()?;
+    let root = root.as_path();
     #[cfg(not(target_os = "macos"))]
     let exe = std::env::current_exe()?;
     #[cfg(target_os = "macos")]
@@ -101,4 +106,346 @@ pub fn install(root: &Path, id: &str) -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     bail!("Автозапуск на этой системе не поддерживается");
     Ok(())
+}
+
+/// Serialize service replacement and uninstall without locking the profile database.
+/// The daemon itself never takes this lock.
+pub async fn control_lock(root: &Path) -> Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let path = root.join("service-control.lock");
+    if let Ok(meta) = std::fs::symlink_metadata(&path) {
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            bail!("Недействительный файл блокировки служб");
+        }
+    }
+    let file = options.open(path)?;
+    for _ in 0..900 {
+        match fs2::FileExt::try_lock_exclusive(&file) {
+            Ok(()) => return Ok(file),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    bail!("Другая команда управления службами не завершилась за 90 секунд")
+}
+
+fn profile_id(id: &str) -> bool {
+    id.len() == 32
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+#[cfg(target_os = "macos")]
+fn agent_directory() -> Result<std::path::PathBuf> {
+    Ok(directories::BaseDirs::new()
+        .context("Домашний каталог недоступен")?
+        .home_dir()
+        .join("Library/LaunchAgents"))
+}
+
+#[cfg(target_os = "macos")]
+struct Agent {
+    file: std::path::PathBuf,
+    root: std::path::PathBuf,
+    id: String,
+}
+
+#[cfg(target_os = "macos")]
+fn read_agent(file: &Path) -> Result<Agent> {
+    let meta = std::fs::symlink_metadata(file)?;
+    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 1024 * 1024 {
+        bail!("Недействительный LaunchAgent: {}", file.display());
+    }
+    let result = Command::new("/usr/bin/plutil")
+        .args(["-convert", "json", "-o", "-"])
+        .arg(file)
+        .output()?;
+    if !result.status.success() {
+        bail!("Не удалось прочитать LaunchAgent: {}", file.display());
+    }
+    let value: serde_json::Value = serde_json::from_slice(&result.stdout)?;
+    let label = value["Label"].as_str().context("LaunchAgent без Label")?;
+    let id = label
+        .strip_prefix("org.shum.cli.")
+        .filter(|id| profile_id(id))
+        .context("Недействительный Label Shum")?;
+    if file.file_name().and_then(|n| n.to_str()) != Some(&format!("{label}.plist")) {
+        bail!("Имя LaunchAgent не соответствует Label");
+    }
+    let args: Vec<String> = serde_json::from_value(value["ProgramArguments"].clone())?;
+    if args.len() != 7
+        || args[1] != "--data-dir"
+        || args[3] != "--profile"
+        || args[4] != id
+        || args[5] != "daemon"
+        || args[6] != "--run"
+    {
+        bail!("Неизвестные аргументы LaunchAgent: {}", file.display());
+    }
+    let root = std::path::PathBuf::from(&args[2]);
+    if !root.is_absolute() {
+        bail!("Каталог данных LaunchAgent должен быть абсолютным");
+    }
+    Ok(Agent {
+        file: file.into(),
+        root: root.canonicalize().unwrap_or(root),
+        id: id.into(),
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn is_installed(root: &Path, id: &str) -> Result<bool> {
+    let file = agent_directory()?.join(format!("org.shum.cli.{id}.plist"));
+    if !file.exists() {
+        return Ok(false);
+    }
+    let agent = read_agent(&file)?;
+    if agent.root != root.canonicalize()? {
+        bail!("LaunchAgent этого профиля использует другой каталог данных");
+    }
+    Ok(true)
+}
+
+#[cfg(target_os = "macos")]
+fn bootout(id: &str) -> Result<()> {
+    let uid = Command::new("/usr/bin/id").arg("-u").output()?;
+    let uid = std::str::from_utf8(&uid.stdout)?.trim();
+    let target = format!("gui/{uid}/org.shum.cli.{id}");
+    if Command::new("/bin/launchctl")
+        .args(["print", &target])
+        .output()?
+        .status
+        .success()
+    {
+        run(Command::new("/bin/launchctl").args(["bootout", &target]))?;
+    }
+    Ok(())
+}
+
+type ServiceRoots = std::collections::BTreeSet<std::path::PathBuf>;
+type ServiceProfiles = std::collections::BTreeSet<(std::path::PathBuf, String)>;
+#[cfg(not(target_os = "macos"))]
+struct Agent;
+
+type ServiceDiscovery = (ServiceRoots, ServiceProfiles, Vec<Agent>);
+
+fn service_profiles(root: &Path, all_registered: bool) -> Result<ServiceDiscovery> {
+    let root = root.canonicalize().unwrap_or_else(|_| root.into());
+    let mut roots = std::collections::BTreeSet::from([root.clone()]);
+    #[cfg(target_os = "macos")]
+    let agents = {
+        let directory = agent_directory()?;
+        let mut agents = Vec::new();
+        if directory.exists() {
+            for entry in std::fs::read_dir(directory)? {
+                let file = entry?.path();
+                let Some(name) = file.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if !name.starts_with("org.shum.cli.") || !name.ends_with(".plist") {
+                    continue;
+                }
+                let agent = read_agent(&file)?;
+                if all_registered || agent.root == root {
+                    roots.insert(agent.root.clone());
+                    agents.push(agent);
+                }
+            }
+        }
+        agents
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = all_registered;
+    #[cfg(not(target_os = "macos"))]
+    let agents = Vec::new();
+    let mut profiles = std::collections::BTreeSet::new();
+    for root in &roots {
+        if !root.is_dir() {
+            continue;
+        }
+        for entry in std::fs::read_dir(root)? {
+            let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if profile_id(&id) && entry.file_type()?.is_dir() {
+                profiles.insert((root.clone(), id));
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    for agent in &agents {
+        profiles.insert((agent.root.clone(), agent.id.clone()));
+    }
+    Ok((roots, profiles, agents))
+}
+
+/// Refresh only active services after an installer switches the stable bundle.
+/// Inactive profiles stay inactive; discovery never opens their keys.
+pub async fn refresh(root: &Path, all_registered: bool) -> Result<serde_json::Value> {
+    let (_, profiles, _) = service_profiles(root, all_registered)?;
+    let mut refreshed = 0;
+    for (root, id) in profiles {
+        if crate::ipc::request(&root, &id, crate::runtime::Request::Snapshot)
+            .await
+            .is_ok()
+        {
+            crate::ipc::ensure(&root, &id).await?;
+            refreshed += 1;
+        }
+    }
+    Ok(serde_json::json!({"activeProfilesRefreshed": refreshed}))
+}
+
+/// With an explicit data directory, only uninstall that root. Otherwise include
+/// all Shum roots registered in the user's LaunchAgents. Never open a key vault.
+pub async fn uninstall(root: &Path, all_registered: bool) -> Result<serde_json::Value> {
+    let (roots, profiles, agents) = service_profiles(root, all_registered)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = &agents;
+    let mut locks = Vec::new();
+    for root in &roots {
+        if root.is_dir() {
+            locks.push(control_lock(root).await?);
+        }
+    }
+    // A failed graceful stop aborts removal: don't erase a running bundle.
+    for (root, id) in &profiles {
+        crate::ipc::stop(root, id).await?;
+    }
+    #[cfg(target_os = "macos")]
+    for agent in &agents {
+        bootout(&agent.id)?;
+        std::fs::remove_file(&agent.file)?;
+    }
+    #[cfg(target_os = "linux")]
+    for (_, id) in &profiles {
+        let config = directories::BaseDirs::new()
+            .context("Нет каталога конфигурации")?
+            .config_dir()
+            .join(format!("systemd/user/shum-{id}.service"));
+        if config.exists() {
+            run(Command::new("systemctl").args([
+                "--user",
+                "disable",
+                "--now",
+                &format!("shum-{id}.service"),
+            ]))?;
+            std::fs::remove_file(config)?;
+            run(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
+        }
+    }
+    #[cfg(target_os = "windows")]
+    for (_, id) in &profiles {
+        let name = format!("Shum-{id}");
+        if Command::new("schtasks")
+            .args(["/Query", "/TN", &name])
+            .output()?
+            .status
+            .success()
+        {
+            run(Command::new("schtasks").args(["/Delete", "/F", "/TN", &name]))?;
+        }
+    }
+    let mut caches = 0;
+    for root in &roots {
+        caches += remove_caches(root)?;
+    }
+    Ok(
+        serde_json::json!({"uninstalled": true, "profilesPreserved": profiles.len(), "bundlesRemoved": caches}),
+    )
+}
+
+fn remove_caches(root: &Path) -> Result<usize> {
+    let cache = root.join("services");
+    if !cache.exists() {
+        return Ok(0);
+    }
+    let meta = std::fs::symlink_metadata(&cache)?;
+    if !meta.is_dir() || meta.file_type().is_symlink() {
+        bail!("Недействительный каталог кэша служб");
+    }
+    let mut removed = 0;
+    for entry in std::fs::read_dir(&cache)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        let app = if name == "Shum.app" {
+            path.clone()
+        } else if name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit()) {
+            path.join("Shum.app")
+        } else {
+            continue;
+        };
+        if let Ok(meta) = std::fs::symlink_metadata(&app) {
+            if meta.is_dir() && !meta.file_type().is_symlink() {
+                std::fs::remove_dir_all(&app)?;
+                removed += 1;
+                if app != path && std::fs::read_dir(&path)?.next().is_none() {
+                    std::fs::remove_dir(&path)?;
+                }
+            }
+        }
+    }
+    if std::fs::read_dir(&cache)?.next().is_none() {
+        std::fs::remove_dir(cache)?;
+    }
+    Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn launch_agent_ids_match_profile_registry_format() {
+        assert!(profile_id("60f55c0dc063911567469ec77f85cb83"));
+        for id in [
+            "f8067d32-e74e-4ea4-a362-e4f4a63f6c7c",
+            "../data",
+            "A",
+            "60F55C0DC063911567469EC77F85CB83",
+        ] {
+            assert!(!profile_id(id));
+        }
+    }
+    #[test]
+    fn cache_removal_preserves_profile_data_and_unrelated_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let profile = root.join("f8067d32e74e4ea4a362e4f4a63f6c7c");
+        std::fs::create_dir(&profile).unwrap();
+        for name in ["keys.bin", "messages.sqlite", "profiles.json"] {
+            std::fs::write(profile.join(name), b"preserve").unwrap();
+        }
+        let cache = root.join("services");
+        let version = cache.join("a".repeat(64));
+        std::fs::create_dir_all(version.join("Shum.app/Contents/MacOS")).unwrap();
+        std::fs::write(version.join("keep.txt"), b"other file").unwrap();
+        std::fs::create_dir_all(cache.join("Shum.app/Contents")).unwrap();
+        #[cfg(unix)]
+        {
+            let external = root.join("external");
+            std::fs::create_dir(&external).unwrap();
+            std::fs::write(external.join("keep"), b"preserve").unwrap();
+            std::os::unix::fs::symlink(&external, cache.join("b".repeat(64))).unwrap();
+        }
+        assert_eq!(remove_caches(root).unwrap(), 2);
+        assert_eq!(remove_caches(root).unwrap(), 0);
+        assert!(version.join("keep.txt").exists());
+        for name in ["keys.bin", "messages.sqlite", "profiles.json"] {
+            assert_eq!(std::fs::read(profile.join(name)).unwrap(), b"preserve");
+        }
+        #[cfg(unix)]
+        assert!(root.join("external/keep").exists());
+    }
 }

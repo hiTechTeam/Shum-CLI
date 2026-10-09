@@ -233,22 +233,8 @@ fn contacts(snapshot: &Value, tab: usize) -> Vec<&Value> {
         })
         .collect()
 }
-fn find_contact<'a>(snapshot: &'a Value, name: &str) -> Result<&'a Value> {
-    let all = snapshot["contacts"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|c| {
-            text(&c["id"]) == name
-                || text(&c["card"]["name"]) == name
-                || (name.len() >= 8 && text(&c["id"]).starts_with(name))
-        })
-        .collect::<Vec<_>>();
-    match all.as_slice() {
-        [one] => Ok(one),
-        [] => bail!("Контакт не найден"),
-        _ => bail!("Несколько контактов с этим именем. Укажите Shum ID"),
-    }
+fn find_contact<'a>(snapshot: &'a Value, selector: &str) -> Result<&'a Value> {
+    crate::terminal::find_contact(snapshot, selector)
 }
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
     let w = width.min(area.width);
@@ -551,7 +537,7 @@ fn draw_content(
             Line::from("^n    кто рядом по Bluetooth"),
             Line::from(""),
             Line::from(Span::styled(
-                "или в терминале: shum invite · shum add <ссылка>",
+                "или в терминале: shum qr · shum add <ссылка>",
                 Style::default().fg(muted),
             )),
         ]);
@@ -607,7 +593,7 @@ fn draw_content(
             } else if card["phase"] == "incomingPending" {
                 "/accept принять · /decline отклонить"
             } else if card["phase"] != "accepted" {
-                "/invite <ник> пригласить"
+                "/invite пригласить"
             } else if card["online"] == true {
                 "в чате"
             } else {
@@ -689,8 +675,11 @@ fn draw_content(
         }
         let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
         let total = paragraph.line_count(history.width);
-        let offset = total
-            .saturating_sub(history.height as usize)
+        let max_scroll = total.saturating_sub(history.height as usize);
+        // Discard invisible overscroll so reversing at the top moves immediately.
+        // Recalculate after wrapping/resizing and snapshot updates for mouse and keys alike.
+        view.scroll = view.scroll.min(max_scroll.min(u16::MAX as usize) as u16);
+        let offset = max_scroll
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
@@ -900,7 +889,7 @@ fn draw_content(
             frame.render_widget(Clear, popup);
             frame.render_widget(
                 Paragraph::new(format!(
-                    "{link}\n\nQR в режиме ASCII: shum invite --ascii\nEsc закрыть"
+                    "{link}\n\nQR в режиме ASCII: shum qr --ascii\nEsc закрыть"
                 ))
                 .wrap(Wrap { trim: false })
                 .block(border("Моё приглашение", true)),
@@ -922,7 +911,7 @@ fn draw_content(
                 );
             } else {
                 frame.render_widget(
-                    Paragraph::new("Увеличьте окно для QR или выполните shum invite")
+                    Paragraph::new("Увеличьте окно для QR или выполните shum qr")
                         .wrap(Wrap { trim: false }),
                     border("", ascii).inner(popup),
                 );
@@ -1176,14 +1165,17 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
     let contact = |arg: Option<&&str>| -> Result<String> {
         arg.copied()
             .or(current)
-            .map(str::to_owned)
-            .context("Укажите контакт или откройте чат")
+            .context("Укажите ID или откройте чат")
+            .and_then(|id| {
+                crate::contact::validate(id)?;
+                Ok(id.to_owned())
+            })
     };
     let req=match args.as_slice() {
         ["/"|"/help"]=>return Ok(Action::Help),
         ["/q"|"/quit"|"/exit"]=>return Ok(Action::Quit),
-        ["/invite"]=>return Ok(Action::Qr),
-        ["/invite",who]=>Request::Invite{contact:(*who).into()},
+        ["/qr"]=>return Ok(Action::Qr),
+        ["/invite",..] if args.len()<=2=>Request::Invite{contact:contact(args.get(1))?},
         ["/accept",..] if args.len()<=2=>Request::Accept{contact:contact(args.get(1))?},
         ["/decline",..] if args.len()<=2=>Request::Decline{contact:contact(args.get(1))?},
         ["/read",..] if args.len()<=2=>Request::Read{contact:contact(args.get(1))?},
@@ -1191,16 +1183,16 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/add",link]=>Request::Add{link:(*link).into()},
         ["/add","--image",path]=>Request::Add{link:crate::terminal::decode_qr(Path::new(path))?},
         ["/open",who]=>return Ok(Action::Open(text(&find_contact(snapshot,who)?["id"]).into())),
-        ["/send",who,body @ ..] if !body.is_empty()=>Request::Send{contact:(*who).into(),text:body.join(" ")},
-        ["/block",who]=>Request::Block{contact:(*who).into(),blocked:true},
-        ["/block",who,"--undo"]=>Request::Block{contact:(*who).into(),blocked:false},
+        ["/send",who,body @ ..] if !body.is_empty()=>Request::Send{contact:contact(Some(who))?,text:body.join(" ")},
+        ["/block",who]=>Request::Block{contact:contact(Some(who))?,blocked:true},
+        ["/block",who,"--undo"]=>Request::Block{contact:contact(Some(who))?,blocked:false},
         ["/cancel",message]=>Request::Cancel{message:(*message).into()},
         ["/react",message,reaction]=>Request::Reaction{message:(*message).into(),reaction:serde_json::from_value(Value::String((*reaction).into())).context("Реакция: heart like dislike laugh fire coffin hundred horror")?},
         ["/profile","name",name @ ..] if !name.is_empty()=>Request::Profile{name:Some(name.join(" ")),bio:None,seed:None},
         ["/profile","bio",bio @ ..]=>Request::Profile{name:None,bio:Some(bio.join(" ")),seed:None},
         ["/profile","avatar","--random"]=>{let mut bytes=[0;8];getrandom::fill(&mut bytes)?;Request::Profile{name:None,bio:None,seed:Some(u64::from_le_bytes(bytes))}},
         ["/profile","avatar","--seed",seed]=>Request::Profile{name:None,bio:None,seed:Some(seed.parse().context("Семя должно быть целым числом")?)},
-        ["/profile"]=>return Ok(Action::Info("Профиль".into(),format!("{}\n{}\n\nShum ID: {}\n\n/profile name <имя>\n/profile bio <текст>\n/profile avatar --random\nCtrl+P: выбрать или создать профиль",safe(text(&snapshot["card"]["name"])),safe(text(&snapshot["card"]["bio"])),text(&snapshot["profile"]["ownerId"])))),
+        ["/profile"]=>return Ok(Action::Info("Профиль".into(),format!("{}\n{}\n\nShum ID: {}\nСетевой ID: {}\n\n/profile name <имя>\n/profile bio <текст>\n/profile avatar --random\nCtrl+P: выбрать или создать профиль",safe(text(&snapshot["card"]["name"])),safe(text(&snapshot["card"]["bio"])),text(&snapshot["profile"]["ownerId"]),text(&snapshot["card"]["nostrKey"])))),
         ["/profile","list"]=>return Ok(Action::Profiles),
         ["/chats"|"/contacts"]=>return Ok(Action::Tab(0)),
         ["/chats","--nearby"]|["/nearby"]=>return Ok(Action::Tab(1)),
@@ -1647,21 +1639,22 @@ Ctrl+P     профили          1–4   фильтр чатов
 q          выход из списка  Ctrl+C / Ctrl+Q / F10 из любого окна
 
 /add <ссылка>               /add --image \"/путь/qr.png\"
-/invite                    мой QR
-/invite <ник>              пригласить в переписку
-/accept [ник]              /decline [ник]
-/open <ник>                /send <ник> \"текст\"
-/read [ник]                /clear [ник] с подтверждением
+/qr                        мой QR
+/invite [ID]               пригласить собеседника чата или по ID
+/accept [ID]              /decline [ID]
+/open <ID>                /send <ID> \"текст\"
+/read [ID]                /clear [ID] с подтверждением
 /react <ID> heart|like|dislike|laugh|fire|coffin|hundred|horror
-/cancel <ID>               /block <ник> [--undo]
+/cancel <ID>               /block <ID> [--undo]
 /profile                   /profile list
 /profile name <имя>        /profile bio <текст>
 /profile avatar --random   /profile avatar --seed <число>
-/keys verify <ник>         /status
+/keys verify <ID>         /status
 /chats [--invites|--unread|--nearby]       /contacts
 /quit или /exit            выход
 
-Ник с пробелами заключите в кавычки. Esc закрыть";
+Без ID команды invite/accept/decline/read/clear действуют в открытом чате.
+Имена только для отображения. Esc закрыть";
 
 /// Read presentation metadata without starting inactive profiles or exposing their messages.
 pub async fn profile_preview(root: &Path, id: &str) -> Option<Value> {

@@ -25,6 +25,8 @@ use tokio::{
     task::JoinSet,
 };
 
+pub const COMMAND_SCHEMA_VERSION: u64 = 2;
+
 pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -142,6 +144,7 @@ pub struct Command {
 type Reply = oneshot::Sender<std::result::Result<Value, String>>;
 struct Lookup {
     key: String,
+    invite: bool,
     expires: i64,
     reply: Reply,
 }
@@ -152,6 +155,7 @@ struct NearbyPeer {
     direct: bool,
 }
 pub struct Runtime {
+    build: crate::identity::Build,
     ble: Option<shum_transport_ble::Ble>,
     ble_updates: mpsc::Receiver<shum_transport_ble::Update>,
     nearby: HashMap<String, NearbyPeer>,
@@ -186,6 +190,7 @@ impl Runtime {
         }
         let (pool, updates) = RelayPool::start(relays, &engine.inbox.own.nostr_key)?;
         Ok(Self {
+            build: crate::identity::current()?.clone(),
             ble: None,
             ble_updates: mpsc::channel(1).1,
             nearby: HashMap::new(),
@@ -304,7 +309,7 @@ impl Runtime {
         }
         Ok(())
     }
-    fn contact(&self, selector: &str) -> Result<String> {
+    fn resolve_contact(&self, selector: &str) -> Result<Option<String>> {
         let cards: HashMap<_, _> = self
             .engine
             .inbox
@@ -318,19 +323,33 @@ impl Runtime {
                     .map(|p| (p.peer.card.id(), &p.peer.card)),
             )
             .collect();
-        let matches: Vec<_> = cards
-            .into_iter()
-            .filter(|(id, card)| {
-                id.as_str() == selector
-                    || card.name == selector
-                    || (selector.len() >= 8 && id.starts_with(selector))
-            })
-            .collect();
-        match matches.as_slice() {
-            [(id, _)] => Ok(id.clone()),
-            [] => bail!("Контакт не найден: {selector}"),
-            _ => bail!("Несколько контактов с этим именем. Укажите Shum ID."),
-        }
+        crate::contact::resolve(
+            selector,
+            cards
+                .iter()
+                .map(|(id, card)| (id.as_str(), card.nostr_key.as_str())),
+        )
+    }
+    fn contact(&self, selector: &str) -> Result<String> {
+        self.resolve_contact(selector)?
+            .context("Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.")
+    }
+    fn invite_contact(&mut self, selector: &str, action: InvitationAction) -> Result<Value> {
+        let id = self.contact(selector)?;
+        let nearby = self
+            .nearby
+            .values()
+            .find(|p| p.peer.card.id() == id)
+            .map(|p| p.peer.card.clone());
+        self.apply(|e, c| {
+            if !e.inbox.contacts.contains_key(&id) && !e.inbox.requests.contains_key(&id) {
+                if let Some(card) = nearby {
+                    e.add_contact(card)?;
+                }
+            }
+            e.invitation(&id, action, None, c)
+        })?;
+        Ok(json!({"status":"ok", "contactID":id}))
     }
     pub fn snapshot(&self) -> Value {
         let own = &self.engine.inbox.own;
@@ -367,7 +386,7 @@ impl Runtime {
             messages.drain(..messages.len() - 2000);
         }
         let reactions:Vec<_>=self.engine.inbox.reactions.iter().map(|((message,person),mark)|json!({"messageID":message,"personID":person,"mark":mark})).collect();
-        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("CARGO_PKG_VERSION")})
+        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("CARGO_PKG_VERSION"),"clientCommandVersion":COMMAND_SCHEMA_VERSION,"build":self.build})
     }
     fn command(&mut self, request: Request) -> Result<Value> {
         match request {
@@ -392,7 +411,7 @@ impl Runtime {
             Request::Send { contact, text } => {
                 let id = self.contact(&contact)?;
                 if self.engine.inbox.phase(&id) != shum_core::rules::Phase::Accepted {
-                    bail!("Сначала пригласите собеседника: shum invite <контакт>. После принятия приглашения можно отправлять сообщения");
+                    bail!("Сначала пригласите собеседника: shum invite <ID>. После принятия приглашения можно отправлять сообщения");
                 }
                 let ephemeral = secret()?;
                 self.apply(|e, c| e.send(&id, &text, None, &ephemeral, c))?;
@@ -461,31 +480,41 @@ impl Runtime {
         }
         Ok(json!({"status":"ok"}))
     }
-    fn start_lookup(&mut self, key: String, reply: Reply) -> Result<()> {
+    fn start_lookup(&mut self, key: String, reply: Reply, invite: bool) {
         if self.lookups.len() >= 8 {
             let _ = reply.send(Err("Слишком много поисков".into()));
-            return Ok(());
+            return;
         }
         if key == self.engine.inbox.own.nostr_key {
             let _ = reply.send(Err("Это ваш профиль".into()));
-            return Ok(());
+            return;
         }
-        let id = uuid()?;
-        let content = format!(
-            "shum-contact-request-v1:{}",
-            STANDARD.encode(canonical::encode(&json!({"id":id}))?)
-        );
-        let event = wrap(&self.profile.keys.nostr, &key, content)?;
-        self.pool.publish_unconfirmed(event)?;
+        let prepared = (|| -> Result<String> {
+            let id = uuid()?;
+            let content = format!(
+                "shum-contact-request-v1:{}",
+                STANDARD.encode(canonical::encode(&json!({"id":id}))?)
+            );
+            let event = wrap(&self.profile.keys.nostr, &key, content)?;
+            self.pool.publish_unconfirmed(event)?;
+            Ok(id)
+        })();
+        let id = match prepared {
+            Ok(id) => id,
+            Err(error) => {
+                let _ = reply.send(Err(error.to_string()));
+                return;
+            }
+        };
         self.lookups.insert(
             id,
             Lookup {
                 key,
+                invite,
                 expires: now() + 20_000,
                 reply,
             },
         );
-        Ok(())
     }
     fn incoming(&mut self, event: nostr::Event) -> Result<()> {
         if self.profile.store.state()["cliNostrHandled"][&event.id]
@@ -587,14 +616,25 @@ impl Runtime {
                                         );
                                         if let Ok(card) = validated {
                                             let contact_id = card.id();
-                                            self.apply(|e, _| {
-                                                e.add_contact(card)?;
-                                                Ok(vec![])
-                                            })?;
                                             if let Some(lookup) = self.lookups.remove(id) {
-                                                let _ = lookup
-                                                    .reply
-                                                    .send(Ok(json!({"contactID":contact_id})));
+                                                if !lookup.reply.is_closed() {
+                                                    let result = self.apply(|e, c| {
+                                                        e.add_contact(card)?;
+                                                        if lookup.invite {
+                                                            e.invitation(
+                                                                &contact_id,
+                                                                InvitationAction::Request,
+                                                                None,
+                                                                c,
+                                                            )
+                                                        } else {
+                                                            Ok(vec![])
+                                                        }
+                                                    });
+                                                    let _ = lookup.reply.send(result
+                                                        .map(|_| json!({"status":"ok", "contactID":contact_id}))
+                                                        .map_err(|e| e.to_string()));
+                                                }
                                             }
                                         }
                                     }
@@ -733,9 +773,14 @@ impl Runtime {
             tokio::select! {
                 next=commands.recv()=>{
                     let Some(Command {request,reply})=next else {break;};
-                    if let Request::Add {link}=&request {if let Ok(Invitation::Locator(key))=invitation::parse(link){if let Err(error)=self.start_lookup(key,reply){self.last_error=Some(error.to_string());}continue;}}
+                    if let Request::Add {link}=&request {if let Ok(Invitation::Locator(key))=invitation::parse(link){self.start_lookup(key,reply,false);continue;}}
+                    if let Request::Invite {contact}=&request {
+                        if matches!(self.resolve_contact(contact), Ok(None)) && crate::contact::network_id(contact) {
+                            self.start_lookup(contact.clone(),reply,true);continue;
+                        }
+                    }
                     let result=match &request {
-                        Request::Invite {contact}|Request::Accept {contact}|Request::Decline {contact}=> {let action=match &request{Request::Invite {..}=>InvitationAction::Request,Request::Accept {..}=>InvitationAction::Accept,_=>InvitationAction::Decline};self.contact(contact).and_then(|id|{let nearby=self.nearby.values().find(|p|p.peer.card.id()==id).map(|p|p.peer.card.clone());self.apply(|e,c|{if !e.inbox.contacts.contains_key(&id) && !e.inbox.requests.contains_key(&id){if let Some(card)=nearby{e.add_contact(card)?;}}e.invitation(&id,action,None,c)})}).map(|_|json!({"status":"ok"}))},
+                        Request::Invite {contact}|Request::Accept {contact}|Request::Decline {contact}=> {let action=match &request{Request::Invite {..}=>InvitationAction::Request,Request::Accept {..}=>InvitationAction::Accept,_=>InvitationAction::Decline};self.invite_contact(contact,action)},
                         _=>self.command(request),
                     };
                     let _=reply.send(result.map_err(|e|e.to_string()));
@@ -754,7 +799,7 @@ impl Runtime {
                 _=tick.tick()=>{
                     if let Err(error)=self.configure_bluetooth(){self.bluetooth["error"]=json!(error.to_string());}
                     if let Err(error)=self.apply(|e,c|Ok(e.tick(c.routes,c.now))){self.last_error=Some(error.to_string());}
-                    let expired:Vec<_>=self.lookups.iter().filter(|(_,l)|l.expires<=now()).map(|(id,_)|id.clone()).collect();for id in expired {if let Some(lookup)=self.lookups.remove(&id){let _=lookup.reply.send(Err("Контакт не ответил за 20 секунд".into()));}}
+                    let expired:Vec<_>=self.lookups.iter().filter(|(_,l)|l.expires<=now()).map(|(id,_)|id.clone()).collect();for id in expired {if let Some(lookup)=self.lookups.remove(&id){let _=lookup.reply.send(Err("Контакт не ответил за 20 секунд. Для добавления офлайн используйте полную карточку или QR.".into()));}}
                 }
                 _=shutdown_signal()=>break,
             }

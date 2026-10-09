@@ -39,8 +39,11 @@ impl Drop for Daemon {
     }
 }
 fn daemon(root: &Path, profile: &str) -> Daemon {
+    daemon_at(Path::new(BIN), root, profile)
+}
+fn daemon_at(binary: &Path, root: &Path, profile: &str) -> Daemon {
     Daemon(
-        Command::new(BIN)
+        Command::new(binary)
             .arg("--data-dir")
             .arg(root)
             .args(["-p", profile, "daemon", "--run"])
@@ -58,7 +61,9 @@ async fn snapshot(root: &Path, id: &str) -> Value {
 }
 async fn wait(root: &Path, id: &str, predicate: impl Fn(&Value) -> bool) -> Value {
     let mut last = Value::Null;
-    let result = timeout(Duration::from_secs(15), async {
+    // Several debug daemons hash their executables concurrently on macOS.
+    // Leave room for cold startup; the expected state itself stays unchanged.
+    let result = timeout(Duration::from_secs(45), async {
         loop {
             if let Ok(value) =
                 shum_cli::ipc::request(root, id, shum_cli::runtime::Request::Snapshot).await
@@ -74,7 +79,7 @@ async fn wait(root: &Path, id: &str, predicate: impl Fn(&Value) -> bool) -> Valu
     .await;
     result.unwrap_or_else(|_| {
         panic!(
-            "expected state within 15 seconds: relays={} contacts={} messages={} error={}",
+            "expected state within 45 seconds: relays={} contacts={} messages={} error={}",
             last["relays"], last["contacts"], last["messages"], last["error"]
         )
     })
@@ -182,23 +187,23 @@ async fn actual_cli_invitation_messages_receipts_profile_and_restart() {
     let png = dir.path().join("invite.png");
     pixels.save(&png).unwrap();
     command(&root, Some(bid), &["add", "--image", png.to_str().unwrap()]);
-    command(&root, Some(aid), &["invite", "Bob"]);
+    command(&root, Some(aid), &["invite", bowner]);
     wait(&root, bid, |s| {
         s["contacts"][0]["phase"] == "incomingPending"
     })
     .await;
-    command(&root, Some(bid), &["accept", "Alice"]);
+    command(&root, Some(bid), &["accept", aowner]);
     wait(&root, aid, |s| s["contacts"][0]["phase"] == "accepted").await;
-    command(&root, Some(aid), &["send", "Bob", "Привет с CLI 🦀"]);
+    command(&root, Some(aid), &["send", bowner, "Привет с CLI 🦀"]);
     let received = wait(&root, bid, |s| {
         s["messages"].as_array().is_some_and(|m| m.len() == 1)
     })
     .await;
     assert_eq!(received["messages"][0]["text"], "Привет с CLI 🦀");
     wait(&root, aid, |s| s["messages"][0]["status"] == "delivered").await;
-    command(&root, Some(bid), &["read", "Alice"]);
+    command(&root, Some(bid), &["read", aowner]);
     wait(&root, aid, |s| s["messages"][0]["status"] == "read").await;
-    command(&root, Some(bid), &["send", "Alice", "Ответ"]);
+    command(&root, Some(bid), &["send", aowner, "Ответ"]);
     wait(&root, aid, |s| {
         s["messages"].as_array().is_some_and(|m| m.len() == 2)
     })
@@ -255,7 +260,46 @@ async fn actual_cli_invitation_messages_receipts_profile_and_restart() {
     wait(&root, aid, |s| s["messages"][2]["status"] == "forwarding").await;
     command(&root, Some(aid), &["daemon", "--stop"]);
     da.0.wait().unwrap();
-    da = daemon(&root, aid);
+    #[cfg(target_os = "macos")]
+    {
+        // Same version, different executable: ensure must replace the daemon.
+        // The disposable ad hoc identity never uses the release certificate.
+        let older = dir.path().join("old-shum");
+        std::fs::copy(BIN, &older).unwrap();
+        assert!(Command::new("/usr/bin/codesign")
+            .args([
+                "--force",
+                "--sign",
+                "-",
+                "--identifier",
+                "org.shum.cli.upgrade-test"
+            ])
+            .arg(&older)
+            .status()
+            .unwrap()
+            .success());
+        da = daemon_at(&older, &root, aid);
+        let before = wait(&root, aid, |s| s["messages"][2]["status"] == "forwarding").await;
+        let old_pid = da.0.id();
+        let after = command(&root, Some(aid), &["status"]);
+        assert!(
+            da.0.wait().unwrap().success(),
+            "old daemon must stop gracefully"
+        );
+        assert_eq!(before["build"]["version"], after["build"]["version"]);
+        assert_ne!(before["build"]["sha256"], after["build"]["sha256"]);
+        let endpoint: Value =
+            serde_json::from_slice(&std::fs::read(root.join(aid).join("daemon.json")).unwrap())
+                .unwrap();
+        assert_ne!(endpoint["pid"], old_pid);
+        assert_eq!(after["messages"][2]["id"], before["messages"][2]["id"]);
+        assert_eq!(after["messages"][2]["text"], "Пока ты офлайн");
+        assert_eq!(after["messages"][2]["status"], "forwarding");
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        da = daemon(&root, aid);
+    }
     wait(&root, aid, |s| s["messages"][2]["status"] == "forwarding").await;
     db = daemon(&root, bid);
     wait(&root, bid, |s| {
@@ -317,6 +361,133 @@ fn rejected(root: &Path, profile: &str, args: &[&str]) -> Value {
     value
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn network_id_invites_new_contact_with_duplicate_names_and_offline_card_adds_locally() {
+    let dir = tempfile::tempdir().unwrap();
+    let roots = [
+        dir.path().join("a"),
+        dir.path().join("b"),
+        dir.path().join("c"),
+    ];
+    let (relay, server) = relay().await;
+    let profiles: Vec<_> = roots
+        .iter()
+        .map(|root| {
+            command(
+                root,
+                None,
+                &[
+                    "--no-bluetooth",
+                    "--relay",
+                    &relay,
+                    "--push-url",
+                    "off",
+                    "init",
+                    "--headless",
+                    "--name",
+                    "Same name",
+                ],
+            )
+        })
+        .collect();
+    let a = &profiles[0];
+    let b = &profiles[1];
+    let c = &profiles[2];
+    let aid = a["profile"]["id"].as_str().unwrap();
+    let bid = b["profile"]["id"].as_str().unwrap();
+    let aowner = a["profile"]["ownerId"].as_str().unwrap();
+    let bowner = b["profile"]["ownerId"].as_str().unwrap();
+    let cowner = c["profile"]["ownerId"].as_str().unwrap();
+    let da = daemon(&roots[0], aid);
+    let db = daemon(&roots[1], bid);
+    wait(&roots[0], aid, |s| {
+        !s["relays"].as_array().unwrap().is_empty()
+    })
+    .await;
+    wait(&roots[1], bid, |s| {
+        !s["relays"].as_array().unwrap().is_empty()
+    })
+    .await;
+    // C never starts a client. Its full card is sufficient for offline addition.
+    command(
+        &roots[0],
+        Some(aid),
+        &["add", c["invitation"].as_str().unwrap()],
+    );
+    // B has not been added to A, and both B and C use exactly the same display name.
+    let invited = command(
+        &roots[0],
+        Some(aid),
+        &["invite", b["card"]["nostrKey"].as_str().unwrap()],
+    );
+    assert_eq!(invited["contactID"], bowner);
+    wait(&roots[1], bid, |s| {
+        s["contacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == aowner && c["phase"] == "incomingPending")
+    })
+    .await;
+    let contacts = command(&roots[0], Some(aid), &["contacts"]);
+    assert_eq!(contacts.as_array().unwrap().len(), 2);
+    assert!(contacts
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == cowner));
+    for args in [
+        &["invite", "Same name"][..],
+        &["send", "Same name", "wrong recipient"],
+        &["keys", "verify", "Same name"],
+        &["clear", "Same name", "--confirm"],
+    ] {
+        let error = rejected(&roots[0], aid, args);
+        assert!(
+            error.to_string().contains("Имя не является адресом"),
+            "{error}"
+        );
+    }
+    rejected(&roots[0], aid, &["invite"]);
+    assert!(command(&roots[0], Some(aid), &["qr"])["link"]
+        .as_str()
+        .unwrap()
+        .starts_with("shum://c4/"));
+    command(&roots[1], Some(bid), &["accept", aowner]);
+    wait(&roots[0], aid, |s| {
+        s["contacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == bowner && c["phase"] == "accepted")
+    })
+    .await;
+    command(
+        &roots[0],
+        Some(aid),
+        &[
+            "send",
+            b["card"]["nostrKey"].as_str().unwrap(),
+            "Correct peer",
+        ],
+    );
+    let received = wait(&roots[1], bid, |s| {
+        !s["messages"].as_array().unwrap().is_empty()
+    })
+    .await;
+    assert_eq!(received["messages"][0]["text"], "Correct peer");
+    assert!(snapshot(&roots[0], aid).await["contacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["id"] == cowner)
+        .all(|c| c["phase"] != "outgoingPending"));
+    command(&roots[0], Some(aid), &["daemon", "--stop"]);
+    command(&roots[1], Some(bid), &["daemon", "--stop"]);
+    drop(da);
+    drop(db);
+    server.abort();
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn command_filters_decline_block_cancel_profile_and_validation() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("profiles");
@@ -351,6 +522,8 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     );
     let aid = a["profile"]["id"].as_str().unwrap();
     let bid = b["profile"]["id"].as_str().unwrap();
+    let aowner = a["profile"]["ownerId"].as_str().unwrap();
+    let bowner = b["profile"]["ownerId"].as_str().unwrap();
     let da = daemon(&root, aid);
     let db = daemon(&root, bid);
     wait(&root, aid, |s| !s["relays"].as_array().unwrap().is_empty()).await;
@@ -372,12 +545,13 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
             .len(),
         1
     );
-    assert!(command(&root, Some(aid), &["invite"])["link"]
+    assert!(command(&root, Some(aid), &["qr"])["link"]
         .as_str()
         .unwrap()
         .starts_with("shum://c4/"));
     assert!(
-        command(&root, Some(aid), &["keys", "verify", "B", "--qr"])["iosFingerprint"].is_string()
+        command(&root, Some(aid), &["keys", "verify", bowner, "--qr"])["iosFingerprint"]
+            .is_string()
     );
     for args in [&["status"][..], &["about"], &["profile"], &["daemon"]] {
         assert!(command(&root, Some(aid), args)["card"].is_object());
@@ -398,9 +572,9 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
         &["profile", "avatar"],
         &["profile", "avatar", "--photo", "missing.png"],
         &["profile", "name", "B"],
-        &["send", "B", "not yet accepted"],
+        &["send", bowner, "not yet accepted"],
         &["keys", "verify", "Missing"],
-        &["clear", "B"],
+        &["clear", bowner],
         &["react", "missing", "invalid"],
     ] {
         rejected(&root, aid, args);
@@ -413,7 +587,7 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     );
     command(&root, None, &["profile", "use", "A"]);
     assert_eq!(command(&root, None, &["profile", "list"])["selected"], aid);
-    command(&root, Some(aid), &["invite", "B"]);
+    command(&root, Some(aid), &["invite", bowner]);
     wait(&root, bid, |s| {
         s["contacts"][0]["phase"] == "incomingPending"
     })
@@ -425,17 +599,17 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
             .len(),
         1
     );
-    command(&root, Some(bid), &["decline", "A"]);
+    command(&root, Some(bid), &["decline", aowner]);
     wait(&root, aid, |s| {
         s["contacts"][0]["phase"] == "declinedByPeer"
     })
     .await;
-    command(&root, Some(bid), &["block", "A"]);
+    command(&root, Some(bid), &["block", aowner]);
     assert!(command(&root, Some(bid), &["contacts"])
         .as_array()
         .unwrap()
         .is_empty());
-    command(&root, Some(bid), &["block", "A", "--undo"]);
+    command(&root, Some(bid), &["block", aowner, "--undo"]);
     assert_eq!(
         command(&root, Some(bid), &["contacts"])
             .as_array()
@@ -444,7 +618,7 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
         1
     );
     // A local decline cannot immediately initiate a new invitation in v1.
-    rejected(&root, bid, &["invite", "A"]);
+    rejected(&root, bid, &["invite", aowner]);
     command(&root, Some(bid), &["daemon", "--stop"]);
     command(&root, Some(aid), &["daemon", "--stop"]);
     drop(da);
@@ -553,6 +727,8 @@ async fn cli_reports_push_rejection_and_server_acceptance_for_offline_recipient(
     );
     let aid = a["profile"]["id"].as_str().unwrap();
     let bid = b["profile"]["id"].as_str().unwrap();
+    let aowner = a["profile"]["ownerId"].as_str().unwrap();
+    let bowner = b["profile"]["ownerId"].as_str().unwrap();
     let _da = daemon(&root, aid);
     let mut db = daemon(&root, bid);
     wait(&root, aid, |s| {
@@ -573,18 +749,18 @@ async fn cli_reports_push_rejection_and_server_acceptance_for_offline_recipient(
         Some(bid),
         &["add", a["invitation"].as_str().unwrap()],
     );
-    command(&root, Some(aid), &["invite", "Bob"]);
+    command(&root, Some(aid), &["invite", bowner]);
     wait(&root, bid, |s| {
         s["contacts"][0]["phase"] == "incomingPending"
     })
     .await;
-    command(&root, Some(bid), &["accept", "Alice"]);
+    command(&root, Some(bid), &["accept", aowner]);
     wait(&root, aid, |s| s["contacts"][0]["phase"] == "accepted").await;
     db.0.kill().unwrap();
     db.0.wait().unwrap();
     for (http, state) in [(401, "failed"), (202, "accepted")] {
         response_status.store(http, Ordering::SeqCst);
-        command(&root, Some(aid), &["send", "Bob", "Push transport test"]);
+        command(&root, Some(aid), &["send", bowner, "Push transport test"]);
         let sent = snapshot(&root, aid).await;
         let event = sent["messages"].as_array().unwrap().last().unwrap()["id"]
             .as_str()

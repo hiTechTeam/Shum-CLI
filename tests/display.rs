@@ -100,8 +100,9 @@ fn apple_terminal_frames_use_indexed_colors_and_readable_defaults() {
         Display::for_terminal("Apple_Terminal", "xterm-256color", "", false, false),
     );
     let mut terminal = Terminal::new(TestBackend::new(80, 32)).unwrap();
-    let snapshot = json!({"card":{"name":"Test","avatarSeed":42},"contacts":[{"id":"one","phase":"accepted","card":{"name":"Friend","avatarSeed":42}}]});
-    let mut view = View::chat("one");
+    let id = "a".repeat(64);
+    let snapshot = json!({"card":{"name":"Test","avatarSeed":42},"contacts":[{"id":id,"phase":"accepted","card":{"name":"Friend","avatarSeed":42}}]});
+    let mut view = View::chat(&id);
     for (width, height) in [(80, 32), (60, 20), (40, 16), (140, 45)] {
         terminal.backend_mut().resize(width, height);
         terminal.autoresize().unwrap();

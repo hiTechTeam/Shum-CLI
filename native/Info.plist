@@ -6,8 +6,8 @@
 <key>CFBundleDisplayName</key><string>Shum</string>
 <key>CFBundleExecutable</key><string>shum</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>0.1.0</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleVersion</key><string>__SHUM_VERSION__</string>
+<key>CFBundleShortVersionString</key><string>__SHUM_VERSION__</string>
 <key>LSUIElement</key><true/>
 <key>NSBluetoothAlwaysUsageDescription</key><string>Shum находит людей рядом и передаёт сообщения без интернета.</string>
 <key>NSBluetoothPeripheralUsageDescription</key><string>Shum показывает ваш профиль устройствам рядом.</string>

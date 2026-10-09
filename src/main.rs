@@ -68,8 +68,13 @@ enum Commands {
         #[command(subcommand)]
         command: Option<ProfileCommand>,
     },
-    #[command(about = "Мой QR или приглашение контакту")]
-    Invite { contact: Option<String> },
+    #[command(about = "Пригласить по Shum ID или полному сетевому ID")]
+    Invite {
+        #[arg(value_name = "ID")]
+        contact: String,
+    },
+    #[command(about = "Мой QR и полная карточка контакта")]
+    Qr,
     #[command(about = "Добавить контакт по ссылке или QR")]
     Add {
         link: Option<String>,
@@ -79,9 +84,15 @@ enum Commands {
     /// Список контактов и их Shum ID
     Contacts,
     /// Принять приглашение в чат
-    Accept { contact: String },
+    Accept {
+        #[arg(value_name = "ID")]
+        contact: String,
+    },
     /// Отклонить приглашение
-    Decline { contact: String },
+    Decline {
+        #[arg(value_name = "ID")]
+        contact: String,
+    },
     /// Чаты и фильтры
     Chats {
         #[arg(long)]
@@ -92,17 +103,31 @@ enum Commands {
         unread: bool,
     },
     /// Открыть чат; вне терминала ждать новые сообщения
-    Open { contact: String },
+    Open {
+        #[arg(value_name = "ID")]
+        contact: String,
+    },
     /// Терминальный интерфейс, при желании сразу в чате
-    Ui { contact: Option<String> },
+    Ui {
+        #[arg(value_name = "ID")]
+        contact: Option<String>,
+    },
     /// Отправить сообщение принятому контакту
-    Send { contact: String, text: String },
+    Send {
+        #[arg(value_name = "ID")]
+        contact: String,
+        text: String,
+    },
     /// Отметить чат прочитанным
-    Read { contact: String },
+    Read {
+        #[arg(value_name = "ID")]
+        contact: String,
+    },
     /// Поставить или снять реакцию на сообщение
     React { message: String, reaction: String },
     /// Очистить чат на этом компьютере
     Clear {
+        #[arg(value_name = "ID")]
         contact: String,
         #[arg(long)]
         confirm: bool,
@@ -111,6 +136,7 @@ enum Commands {
     Cancel { message: String },
     /// Заблокировать контакт; --undo разблокировать
     Block {
+        #[arg(value_name = "ID")]
         contact: String,
         #[arg(long)]
         undo: bool,
@@ -132,12 +158,18 @@ enum Commands {
     Nearby,
     /// Фоновая служба: автозапуск или остановка
     Daemon {
-        #[arg(long, hide = true, conflicts_with_all = ["install", "stop"])]
+        #[arg(long, hide = true, conflicts_with_all = ["install", "stop", "uninstall", "refresh"])]
         run: bool,
-        #[arg(long, conflicts_with = "stop")]
+        #[arg(long, conflicts_with_all = ["stop", "uninstall", "refresh"])]
         install: bool,
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["uninstall", "refresh"])]
         stop: bool,
+        /// Остановить все службы и удалить автозапуск, сохранив данные
+        #[arg(long)]
+        uninstall: bool,
+        /// Used by the standalone installer to update active profiles only
+        #[arg(long, hide = true, conflicts_with = "uninstall")]
+        refresh: bool,
     },
 }
 #[derive(Subcommand)]
@@ -169,6 +201,7 @@ enum ProfileCommand {
 #[derive(Subcommand)]
 enum KeysCommand {
     Verify {
+        #[arg(value_name = "ID")]
         contact: String,
         #[arg(long)]
         qr: bool,
@@ -232,8 +265,31 @@ async fn main() -> std::process::ExitCode {
     }
 }
 async fn run(args: Args) -> Result<()> {
+    // Capture our executable before Homebrew can replace this installation.
+    let _build = shum_cli::identity::current()?;
     let palette = Palette::stdout(args.ascii);
     let root = root(&args)?;
+    if matches!(
+        args.command,
+        Some(Commands::Daemon {
+            uninstall: true,
+            ..
+        })
+    ) {
+        let result = shum_cli::service::uninstall(&root, args.data_dir.is_none()).await?;
+        return output(
+            result,
+            args.json,
+            &palette.paint(
+                Tone::Accent,
+                "Службы и автозапуск удалены. Данные профилей сохранены.",
+            ),
+        );
+    }
+    if matches!(args.command, Some(Commands::Daemon { refresh: true, .. })) {
+        let result = shum_cli::service::refresh(&root, args.data_dir.is_none()).await?;
+        return output(result, args.json, "Активные службы обновлены.");
+    }
     let profiles = Profiles::new(&root)?;
     let settings = onboarding::Settings {
         bluetooth: args.bluetooth
@@ -400,6 +456,7 @@ async fn run(args: Args) -> Result<()> {
         );
     }
     if let Some(Commands::Daemon { stop: true, .. }) = &args.command {
+        let _control = shum_cli::service::control_lock(&root).await?;
         ipc::stop(&root, &profile.id).await?;
         return output(
             json!({"stopped":true}),
@@ -408,6 +465,7 @@ async fn run(args: Args) -> Result<()> {
         );
     }
     if let Some(Commands::Daemon { install: true, .. }) = &args.command {
+        let _control = shum_cli::service::control_lock(&root).await?;
         ipc::stop(&root, &profile.id).await?;
         shum_cli::service::install(&root, &profile.id)?;
         return output(
@@ -479,9 +537,7 @@ async fn run(args: Args) -> Result<()> {
                 },
             }
         }
-        Some(Commands::Invite {
-            contact: Some(contact),
-        }) => Request::Invite {
+        Some(Commands::Invite { contact }) => Request::Invite {
             contact: contact.clone(),
         },
         Some(Commands::Accept { contact }) => Request::Accept {
@@ -563,7 +619,7 @@ async fn run(args: Args) -> Result<()> {
     };
     let value = ipc::request(&root, &profile.id, request).await?;
     match args.command {
-        Some(Commands::Invite { contact: None }) => {
+        Some(Commands::Qr) => {
             let card: Card = serde_json::from_value(value["card"].clone())?;
             let link = card.invitation()?;
             if args.json {

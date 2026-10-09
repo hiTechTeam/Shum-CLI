@@ -2,8 +2,10 @@ use ratatui::{backend::TestBackend, Terminal};
 use ratatui_image::picker::Picker;
 use serde_json::{json, Value};
 use shum_cli::ui::{draw, Pictures, View};
+const ANNA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const IGOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 fn example() -> Value {
-    json!({"profile":{"id":"local"},"card":{"name":"Игорь Загоев"},"relays":["wss://test.invalid"],"contacts":[{"id":"anna","card":{"name":"Аня","bio":"Дизайнер, люблю кофе и настолки.","avatarSeed":42},"unread":1,"nearby":false,"phase":"accepted","typing":true},{"id":"igor","card":{"name":"Игорь","avatarSeed":123},"phase":"incomingPending","unread":0}],"messages":[{"id":"m1","contactID":"anna","outgoing":false,"text":"Привет! Ты была на фестивале?","timestamp":1800000000000_i64,"status":"read"},{"id":"m2","contactID":"anna","outgoing":true,"text":"Да, у сцены с синтезаторами","timestamp":1800000100000_i64,"status":"read"}],"reactions":[{"messageID":"m2","mark":{"reaction":"like"}}]})
+    json!({"profile":{"id":"local"},"card":{"name":"Игорь Загоев"},"relays":["wss://test.invalid"],"contacts":[{"id":ANNA,"card":{"name":"Аня","bio":"Дизайнер, люблю кофе и настолки.","avatarSeed":42},"unread":1,"nearby":false,"phase":"accepted","typing":true},{"id":IGOR,"card":{"name":"Игорь","avatarSeed":123},"phase":"incomingPending","unread":0}],"messages":[{"id":"m1","contactID":ANNA,"outgoing":false,"text":"Привет! Ты была на фестивале?","timestamp":1800000000000_i64,"status":"read"},{"id":"m2","contactID":ANNA,"outgoing":true,"text":"Да, у сцены с синтезаторами","timestamp":1800000100000_i64,"status":"read"}],"reactions":[{"messageID":"m2","mark":{"reaction":"like"}}]})
 }
 #[test]
 fn native_chat_avatars_stay_inside_rows_when_scrolling_and_resizing() {
@@ -118,7 +120,7 @@ fn tui_renders_chats_avatars_and_empty_state_in_small_terminals() {
     for (width, height) in [(80, 32), (40, 16), (140, 45)] {
         for ascii in [false, true] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-            let mut view = View::chat("anna");
+            let mut view = View::chat(ANNA);
             terminal
                 .draw(|f| draw(f, &example(), &mut view, &mut pictures, ascii))
                 .unwrap();
@@ -175,6 +177,72 @@ fn tui_renders_chats_avatars_and_empty_state_in_small_terminals() {
 
 fn key(code: crossterm::event::KeyCode) -> crossterm::event::KeyEvent {
     crossterm::event::KeyEvent::new(code, crossterm::event::KeyModifiers::NONE)
+}
+#[test]
+fn chat_scroll_reverses_immediately_at_the_top_and_after_resize() {
+    use crossterm::event::KeyCode as K;
+    use shum_cli::ui::handle_key;
+    for native in [false, true] {
+        let mut picker = Picker::halfblocks();
+        if native {
+            picker.set_protocol_type(ratatui_image::picker::ProtocolType::Iterm2);
+        }
+        let mut pictures = Pictures::new(picker);
+        let mut data = example();
+        data["messages"] = json!((0..60)
+            .map(|i| json!({"id":format!("m{i}"),"contactID":ANNA,
+                "outgoing":false,"text":format!("Message {i:02} {}", "wrapped text ".repeat(8)),
+                "timestamp":1800000000000_i64,"reply":{"text":"quoted message"}}))
+            .collect::<Vec<_>>());
+        data["reactions"] = json!([{"messageID":"m0","mark":{"reaction":"like"}}]);
+        let mut view = View::chat(ANNA);
+        let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        let render =
+            |terminal: &mut Terminal<TestBackend>, view: &mut View, pictures: &mut Pictures| {
+                terminal
+                    .draw(|f| draw(f, &data, view, pictures, false))
+                    .unwrap();
+                terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .iter()
+                    .map(|c| c.symbol())
+                    .collect::<String>()
+            };
+        let bottom = render(&mut terminal, &mut view, &mut pictures);
+        // Repeated PageUp presses must stop accumulating when the first line is visible.
+        for _ in 0..80 {
+            handle_key(&mut view, &data, key(K::PageUp)).unwrap();
+            render(&mut terminal, &mut view, &mut pictures);
+        }
+        let top = render(&mut terminal, &mut view, &mut pictures);
+        assert_ne!(top, bottom);
+        let limit = view.scroll;
+        handle_key(&mut view, &data, key(K::PageUp)).unwrap();
+        assert_eq!(render(&mut terminal, &mut view, &mut pictures), top);
+        assert_eq!(view.scroll, limit, "no invisible overscroll at the top");
+        handle_key(&mut view, &data, key(K::PageDown)).unwrap();
+        assert_ne!(
+            render(&mut terminal, &mut view, &mut pictures),
+            top,
+            "the first downward press must move the visible history"
+        );
+        // A wider/taller window reduces wrapped history and its scroll limit.
+        terminal.backend_mut().resize(160, 45);
+        terminal.autoresize().unwrap();
+        view.scroll = limit;
+        let resized = render(&mut terminal, &mut view, &mut pictures);
+        assert!(view.scroll < limit, "resize must discard excess scroll");
+        handle_key(&mut view, &data, key(K::PageDown)).unwrap();
+        assert_ne!(render(&mut terminal, &mut view, &mut pictures), resized);
+        // A shorter updated snapshot must discard the old history's scroll limit, too.
+        data["messages"] = json!([]);
+        terminal
+            .draw(|f| draw(f, &data, &mut view, &mut pictures, false))
+            .unwrap();
+        assert_eq!(view.scroll, 0);
+    }
 }
 #[test]
 fn keyboard_modes_keep_shortcuts_reachable_without_corrupting_messages() {
@@ -240,7 +308,7 @@ fn slash_commands_respect_arguments_and_reject_typos() {
         runtime::Request,
         ui::{handle_key, Action},
     };
-    let mut view = View::chat("anna");
+    let mut view = View::chat(ANNA);
     let data = example();
     for input in ["/quit", "/exit", "/q"] {
         view.input = input.into();
@@ -249,13 +317,13 @@ fn slash_commands_respect_arguments_and_reject_typos() {
             Action::Quit
         ));
     }
-    view.input = "/invite Игорь".into();
+    view.input = format!("/invite {IGOR}");
     assert!(
-        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Invite{contact}) if contact=="Игорь")
+        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Invite{contact}) if contact==IGOR)
     );
-    view.input = "/send \"Игорь Загоев\" \"Привет, мир!\"".into();
+    view.input = format!("/send {IGOR} \"Привет, мир!\"");
     assert!(
-        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Send{contact,text}) if contact=="Игорь Загоев" && text=="Привет, мир!")
+        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Send{contact,text}) if contact==IGOR && text=="Привет, мир!")
     );
     for input in [
         "/add",
@@ -276,6 +344,50 @@ fn slash_commands_respect_arguments_and_reject_typos() {
         handle_key(&mut view, &data, key(KeyCode::Enter)).unwrap(),
         Action::Info(..)
     ));
+}
+#[test]
+fn invite_uses_the_open_chat_and_qr_has_a_separate_command() {
+    use crossterm::event::KeyCode as K;
+    use shum_cli::{
+        runtime::Request,
+        ui::{handle_key, Action},
+    };
+    let data = example();
+    let mut view = View::chat(ANNA);
+    // List selection is deliberately another contact; the open chat owns the action.
+    view.selected = 1;
+    view.input = "/invite".into();
+    assert!(
+        matches!(handle_key(&mut view, &data, key(K::Enter)).unwrap(),
+        Action::Request(Request::Invite { contact }) if contact == ANNA)
+    );
+    view.input = "/qr".into();
+    assert!(matches!(
+        handle_key(&mut view, &data, key(K::Enter)).unwrap(),
+        Action::Qr
+    ));
+    for command in [
+        "/invite Аня",
+        "/send Аня hello",
+        "/open Аня",
+        "/accept Аня",
+        "/block Аня",
+    ] {
+        view.input = command.into();
+        assert!(
+            handle_key(&mut view, &data, key(K::Enter)).is_err(),
+            "{command}"
+        );
+    }
+    view.opened = None;
+    view.input = "/invite".into();
+    assert!(handle_key(&mut view, &data, key(K::Enter)).is_err());
+    let network = "c".repeat(64);
+    view.input = format!("/invite {network}");
+    assert!(
+        matches!(handle_key(&mut view, &data, key(K::Enter)).unwrap(),
+        Action::Request(Request::Invite { contact }) if contact == network)
+    );
 }
 #[test]
 fn wizard_empty_screen_and_profiles_render_without_clipping_at_supported_sizes() {
@@ -367,7 +479,7 @@ fn chat_list_typing_is_visible_and_restores_the_preview() {
     let mut data = example();
     data["contacts"].as_array_mut().unwrap().truncate(1);
     data["contacts"][0]["nearby"] = json!(true);
-    data["messages"] = json!([{"contactID":"anna","text":"Последнее"}]);
+    data["messages"] = json!([{"contactID":ANNA,"text":"Последнее"}]);
     let mut pictures = Pictures::new(Picker::halfblocks());
     for ascii in [false, true] {
         for tab in [0, 1, 3] {
