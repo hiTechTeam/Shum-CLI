@@ -1,0 +1,60 @@
+name: CLI
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Test and lint (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Private Git dependencies
+        shell: bash
+        env:
+          CORE_DEPLOY_KEY: ${{ secrets.CORE_DEPLOY_KEY }}
+          PROTOCOL_DEPLOY_KEY: ${{ secrets.PROTOCOL_DEPLOY_KEY }}
+        run: |
+          test -n "$CORE_DEPLOY_KEY"
+          test -n "$PROTOCOL_DEPLOY_KEY"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$CORE_DEPLOY_KEY" > "$HOME/.ssh/shum-core"
+          printf '%s\n' "$PROTOCOL_DEPLOY_KEY" > "$HOME/.ssh/shum-protocol"
+          chmod 600 "$HOME/.ssh/shum-core" "$HOME/.ssh/shum-protocol"
+          cat >> "$HOME/.ssh/config" <<'CONFIG'
+          Host shum-core
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/shum-core
+            IdentitiesOnly yes
+          Host shum-protocol
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/shum-protocol
+            IdentitiesOnly yes
+          CONFIG
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' 'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=' 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=' >> "$HOME/.ssh/known_hosts"
+          git config --global url."ssh://git@shum-core/hiTechTeam/Shum-Core.git".insteadOf "https://github.com/hiTechTeam/Shum-Core.git"
+          git config --global url."ssh://git@shum-protocol/hiTechTeam/Shum-Protocol.git".insteadOf "https://github.com/hiTechTeam/Shum-Protocol.git"
+      - name: Select stable Rust
+        run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt
+      - name: Formatting
+        run: cargo +stable fmt --all -- --check
+      - name: Tests
+        run: cargo +stable test --locked
+      - name: Clippy
+        run: cargo +stable clippy --locked --all-targets -- -D warnings
+      - name: Remove dependency keys
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/shum-core" "$HOME/.ssh/shum-protocol"

@@ -165,10 +165,8 @@ fn apple_terminal_frames_use_indexed_colors_and_readable_defaults() {
 
 #[test]
 fn avatar_preview_uses_complete_background_cells_for_every_seed() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../protocol/vectors/01-avatar-pixels.json"
-    ))
-    .unwrap();
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/01-avatar-pixels.json")).unwrap();
     for colors in [Colors::Rgb, Colors::Indexed] {
         for case in fixture["cases"].as_array().unwrap() {
             let seed = case["seed"].as_str().unwrap().parse().unwrap();

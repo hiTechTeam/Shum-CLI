@@ -30,10 +30,8 @@ fn terminal_downsampling_preserves_centered_details_and_transparent_colors() {
 }
 #[test]
 fn exact_swift_avatar_pixels() {
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../../protocol/vectors/01-avatar-pixels.json"
-    ))
-    .unwrap();
+    let fixture: Value =
+        serde_json::from_str(include_str!("fixtures/01-avatar-pixels.json")).unwrap();
     for c in fixture["cases"].as_array().unwrap() {
         let seed = c["seed"].as_str().unwrap().parse().unwrap();
         let avatar = avatar::render(seed);

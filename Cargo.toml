@@ -1,20 +1,20 @@
 [package]
 name = "shum-cli"
 description = "Shum command-line and terminal client"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.1.5"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/hiTechTeam/Shum-CLI"
 
 [[bin]]
 name = "shum"
 path = "src/main.rs"
 
 [dependencies]
-shum-core.workspace = true
-shum-transport-nostr.workspace = true
-shum-transport-ble.workspace = true
-shum-store.workspace = true
+shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
+shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
+shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
+shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "57d11b999942d97725c1f34d1c2c20ee3b7067ee" }
 anyhow = "1"
 base64 = "0.22.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
