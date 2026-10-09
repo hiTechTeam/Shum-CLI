@@ -88,6 +88,8 @@ Shum.app/Contents
 Shum.app/Contents/Info.plist
 Shum.app/Contents/MacOS
 Shum.app/Contents/MacOS/shum
+Shum.app/Contents/Resources
+Shum.app/Contents/Resources/LICENSE
 Shum.app/Contents/_CodeSignature
 Shum.app/Contents/_CodeSignature/CodeResources
 FILES

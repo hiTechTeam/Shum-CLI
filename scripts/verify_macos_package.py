@@ -26,8 +26,10 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
     files = {str(p.relative_to(payload)) for p in payload.rglob("*") if p.is_file() or p.is_symlink()}
     assert files == {"usr/local/bin/shum", "usr/local/libexec/shum/Shum.app/Contents/Info.plist",
                      "usr/local/libexec/shum/Shum.app/Contents/MacOS/shum",
+                     "usr/local/libexec/shum/Shum.app/Contents/Resources/LICENSE",
                      "usr/local/libexec/shum/Shum.app/Contents/_CodeSignature/CodeResources"}, files
     assert os.access(binary, os.X_OK)
+    assert (app / "Contents/Resources/LICENSE").read_bytes() == (Path(__file__).resolve().parents[1] / "LICENSE").read_bytes()
     assert hashlib.sha256(binary.read_bytes()).hexdigest() == manifest["binarySha256"]
     minima, images = macho_requirements(binary)
     assert minima == manifest["minimumMacOSByArchitecture"]
@@ -68,6 +70,7 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
     with tarfile.open(archive) as bundle:
         assert set(bundle.getnames()) == {"Shum.app", "Shum.app/Contents", "Shum.app/Contents/MacOS",
             "Shum.app/Contents/MacOS/shum", "Shum.app/Contents/Info.plist", "Shum.app/Contents/_CodeSignature",
+            "Shum.app/Contents/Resources", "Shum.app/Contents/Resources/LICENSE",
             "Shum.app/Contents/_CodeSignature/CodeResources"}
         assert hashlib.sha256(bundle.extractfile("Shum.app/Contents/MacOS/shum").read()).hexdigest() == manifest["binarySha256"]
     formula = (package.parent / "homebrew-shum/Formula/shum.rb").read_text()

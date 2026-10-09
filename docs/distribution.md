@@ -57,15 +57,14 @@ Silicon не заменяет настоящий Intel Mac. Windows и Linux н�
 Проверка пакета без установки:
 
 ```sh
-python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.5-macOS-universal-unsigned.pkg
+python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.6-macOS-universal-unsigned.pkg
 ```
 
 ## Homebrew
 
 Публичный tap: [hiTechTeam/homebrew-shum](https://github.com/hiTechTeam/homebrew-shum).
-Подготовленная формула устанавливает `Shum.app` в `prefix`, создаёт ссылку
-`bin/shum`, проверяет SHA-256 и версию. Опубликованный tap пока использует предыдущий
-формат пакета; его обновление выполняется отдельно после согласования:
+Формула 0.1.6 устанавливает `Shum.app` в `prefix`, создаёт ссылку
+`bin/shum`, проверяет SHA-256 и версию:
 
 ```sh
 brew install hitechteam/shum/shum
@@ -86,7 +85,7 @@ Shum-Core подключается как отдельная закреплён�
 ## Установка скриптом
 
 `install.sh` написан на POSIX sh, без sudo, изменения shell-файлов и установки
-инструментов разработчика. Команда для сайта после публикации:
+инструментов разработчика. Команда установки и обновления:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh | sh

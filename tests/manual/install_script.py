@@ -48,6 +48,8 @@ with tempfile.TemporaryDirectory(prefix="shum-installer-test-") as temporary:
         app = root / "stage/Shum.app"
         if app.parent.exists(): shutil.rmtree(app.parent)
         (app / "Contents/MacOS").mkdir(parents=True)
+        (app / "Contents/Resources").mkdir()
+        (app / "Contents/Resources/LICENSE").write_bytes((ROOT / "LICENSE").read_bytes())
         (app / "Contents/_CodeSignature").mkdir()
         (app / "Contents/Info.plist").write_text("fixture info")
         (app / "Contents/_CodeSignature/CodeResources").write_text("fixture signature")

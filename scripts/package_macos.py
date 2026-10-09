@@ -231,6 +231,9 @@ def main():
         executable.chmod(0o755)
         template = (ROOT / "native/Info.plist").read_text().replace("__SHUM_VERSION__", version)
         (app / "Contents/Info.plist").write_text(template)
+        resources = app / "Contents/Resources"
+        resources.mkdir()
+        shutil.copy2(ROOT / "LICENSE", resources / "LICENSE")
         certificate, designated = sign_application(app, args.sign_application, args.development_adhoc)
         binary_digest = hashlib.sha256(executable.read_bytes()).hexdigest()
         link = stage / "root/usr/local/bin/shum"
