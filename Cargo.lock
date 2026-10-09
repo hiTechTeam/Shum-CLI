@@ -3751,7 +3751,7 @@ dependencies = [
 [[package]]
 name = "shum-core"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=4020dfd25bcbfd7a60040c435b065665c8d11684#4020dfd25bcbfd7a60040c435b065665c8d11684"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=93df2317c4fbbca8f405f643f7609aa7c1da91f7#93df2317c4fbbca8f405f643f7609aa7c1da91f7"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -3776,7 +3776,7 @@ dependencies = [
 [[package]]
 name = "shum-store"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=4020dfd25bcbfd7a60040c435b065665c8d11684#4020dfd25bcbfd7a60040c435b065665c8d11684"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=93df2317c4fbbca8f405f643f7609aa7c1da91f7#93df2317c4fbbca8f405f643f7609aa7c1da91f7"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -3799,7 +3799,7 @@ dependencies = [
 [[package]]
 name = "shum-transport-ble"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=4020dfd25bcbfd7a60040c435b065665c8d11684#4020dfd25bcbfd7a60040c435b065665c8d11684"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=93df2317c4fbbca8f405f643f7609aa7c1da91f7#93df2317c4fbbca8f405f643f7609aa7c1da91f7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3818,7 +3818,7 @@ dependencies = [
 [[package]]
 name = "shum-transport-nostr"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=4020dfd25bcbfd7a60040c435b065665c8d11684#4020dfd25bcbfd7a60040c435b065665c8d11684"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=93df2317c4fbbca8f405f643f7609aa7c1da91f7#93df2317c4fbbca8f405f643f7609aa7c1da91f7"
 dependencies = [
  "base64 0.22.1",
  "futures-util",

@@ -571,7 +571,6 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
         &["add", "not-a-link"],
         &["profile", "avatar"],
         &["profile", "avatar", "--photo", "missing.png"],
-        &["profile", "name", "B"],
         &["send", bowner, "not yet accepted"],
         &["keys", "verify", "Missing"],
         &["clear", bowner],
@@ -585,7 +584,7 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
         command(&root, Some(aid), &["profile"])["card"]["bio"],
         "О себе"
     );
-    command(&root, None, &["profile", "use", "A"]);
+    command(&root, None, &["profile", "use", aid]);
     assert_eq!(command(&root, None, &["profile", "list"])["selected"], aid);
     command(&root, Some(aid), &["invite", bowner]);
     wait(&root, bid, |s| {
@@ -619,6 +618,11 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     );
     // A local decline cannot immediately initiate a new invitation in v1.
     rejected(&root, bid, &["invite", aowner]);
+    command(&root, Some(bid), &["profile", "name", "A"]);
+    let renamed = command(&root, Some(bid), &["profile"]);
+    assert_eq!(renamed["card"]["name"], "A");
+    assert_eq!(renamed["profile"]["id"], bid);
+    assert_eq!(renamed["profile"]["ownerId"], bowner);
     command(&root, Some(bid), &["daemon", "--stop"]);
     command(&root, Some(aid), &["daemon", "--stop"]);
     drop(da);
@@ -626,10 +630,10 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     rejected(
         &root,
         aid,
-        &["profile", "delete", "A", "--confirm", "wrong"],
+        &["profile", "delete", aid, "--confirm", "wrong"],
     );
-    command(&root, None, &["profile", "delete", "A", "--confirm", "A"]);
-    command(&root, None, &["profile", "delete", "B", "--confirm", "B"]);
+    command(&root, None, &["profile", "delete", aid, "--confirm", "A"]);
+    command(&root, None, &["profile", "delete", bid, "--confirm", "A"]);
     assert!(command(&root, None, &["profile", "list"])["profiles"]
         .as_array()
         .unwrap()

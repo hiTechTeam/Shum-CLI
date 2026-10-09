@@ -856,6 +856,14 @@ fn draw_content(
                 })),
                 Rect::new(row.x + inset, row.y + 1, row.width.saturating_sub(inset), 1),
             );
+            if let Some(profile) = profiles.get(i) {
+                if row.height >= 3 {
+                    frame.render_widget(
+                        Paragraph::new(format!("ID: {}", profile.id)).style(rowstyle.fg(muted)),
+                        Rect::new(row.x + inset, row.y + 2, row.width.saturating_sub(inset), 1),
+                    );
+                }
+            }
         }
         frame.render_widget(
             Paragraph::new("Enter выбрать · d удалить · Esc закрыть")
@@ -927,7 +935,11 @@ fn draw_content(
         frame.render_widget(Clear, popup);
         frame.render_widget(
             Paragraph::new(format!(
-                "{}\n{}\nEnter подтвердить · Esc отменить",
+                "{}{}\n{}\nEnter подтвердить · Esc отменить",
+                match form {
+                    Form::DeleteProfile { id, name } => format!("{}\n{}\n", safe(name), id),
+                    Form::ClearChat(_) => String::new(),
+                },
                 safe(&view.input),
                 safe(&view.status)
             ))

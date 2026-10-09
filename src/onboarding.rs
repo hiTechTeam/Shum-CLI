@@ -21,6 +21,76 @@ use shum_store::{
 };
 use std::{path::Path, time::Duration};
 
+/// Like iOS registration, choose the first portrait from the profile's public
+/// signing key. The selected seed is explicit in the signed transport card;
+/// Core's legacy default for cards without a selected seed remains unchanged.
+pub fn initial_seed(keys: &ProfileKeys) -> u64 {
+    shum_core::crypto::avatar_seed(&keys.signing.ed_public())
+}
+
+const SECURITY_STEPS: [&str; 4] = [
+    "Криптографические ключи",
+    "Шифрование",
+    "Защищённое хранилище",
+    "Проверка",
+];
+
+/// Prepare and check security before asking for a name. Temporary encrypted
+/// storage is removed before returning; secrets stay in memory until the user
+/// confirms the profile. No provisional profile is published in the registry.
+pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKeys> {
+    progress(0);
+    let keys = ProfileKeys::generate()?;
+    progress(1);
+    let mut nonce = [0; 12];
+    getrandom::fill(&mut nonce)?;
+    let challenge = b"shum.registration.check.v1";
+    let encrypted = shum_store::codec::seal(keys.storage.expose(), &nonce, challenge, b"")?;
+    ensure!(
+        shum_store::codec::open(keys.storage.expose(), &encrypted, b"")?.as_slice() == challenge,
+        "Не прошла проверка шифрования"
+    );
+    progress(2);
+    Profiles::new(root)?;
+    let temporary = tempfile::Builder::new()
+        .prefix(".registration-")
+        .tempdir_in(root)?;
+    let database = temporary.path().join("check.sqlite");
+    let card = Card::create(
+        &keys.noise,
+        &keys.signing,
+        &keys.nostr,
+        "Подготовка".into(),
+        "",
+        Some(0),
+        1,
+    )?;
+    let mut store = shum_store::Store::open(&database, &keys.owner_id(), keys.storage_key())?;
+    store.transaction(|state| {
+        state["ownProfileCard"] = serde_json::to_value(&card)?;
+        Ok(())
+    })?;
+    store.checkpoint()?;
+    drop(store);
+    progress(3);
+    let reopened = shum_store::Store::open(&database, &keys.owner_id(), keys.storage_key())?;
+    let stored: Card = serde_json::from_value(reopened.state()["ownProfileCard"].clone())?;
+    stored.validate()?;
+    ensure!(stored == card, "Не прошла проверка защищённого хранилища");
+    ensure!(
+        shum_core::crypto::verify_ed(
+            &keys.signing.ed_public(),
+            &keys.signing.sign(challenge),
+            challenge
+        ),
+        "Не прошла проверка ключа профиля"
+    );
+    drop(reopened);
+    temporary.close()?;
+    progress(4);
+    Ok(keys)
+}
+
 const SHIELD: [&str; 13] = [
     "  ############  ",
     " #            # ",
@@ -93,7 +163,7 @@ pub fn create(
         &keys.nostr,
         name.into(),
         "",
-        seed,
+        Some(seed.unwrap_or_else(|| initial_seed(&keys))),
         1,
     )?;
     card.validate()?;
@@ -145,11 +215,149 @@ pub struct Wizard {
     pub error: String,
     pub file_keys: bool,
 }
+
+pub fn draw_preparation(
+    frame: &mut Frame<'_>,
+    completed: usize,
+    pictures: &mut Pictures,
+    ascii: bool,
+) {
+    draw_security(frame, completed.min(4), None, "", ascii);
+    pictures.colors.apply(frame.buffer_mut(), ascii);
+}
+
+fn draw_security(
+    frame: &mut Frame<'_>,
+    completed: usize,
+    name: Option<&str>,
+    error: &str,
+    ascii: bool,
+) {
+    let area = frame.area();
+    let color = |c| if ascii { Color::Reset } else { c };
+    let green = Style::default().fg(color(GREEN));
+    let muted = Style::default().fg(color(MUTED));
+    frame.render_widget(
+        Paragraph::new("").style(Style::default().bg(color(Color::Rgb(10, 13, 11)))),
+        area,
+    );
+    if area.width < 35 || area.height < 18 {
+        frame.render_widget(
+            Paragraph::new("Увеличьте окно до 35×18. Esc отменить"),
+            area,
+        );
+        return;
+    }
+    let x = area.x + 2;
+    let width = area.width.saturating_sub(4);
+    let row = |y| Rect::new(x, area.y + y, width, 1);
+    frame.render_widget(Paragraph::new("Создаём вашу защиту").style(green), row(1));
+    frame.render_widget(
+        Paragraph::new("Ключи создаются и сохраняются только на этом устройстве.")
+            .style(muted)
+            .wrap(Wrap { trim: false }),
+        Rect::new(x, area.y + 3, width, 2),
+    );
+    let tall = area.height >= 32 && area.width >= 40 && !ascii;
+    if tall {
+        // Solid background cells avoid seams from block glyphs in Terminal.
+        for (y, line) in SHIELD.iter().enumerate() {
+            for (column, pixel) in line.chars().enumerate() {
+                if pixel == '#' {
+                    for dx in 0..2 {
+                        frame.buffer_mut()[(x + 2 + column as u16 * 2 + dx, area.y + 6 + y as u16)]
+                            .set_symbol(" ")
+                            .set_bg(color(GREEN));
+                    }
+                }
+            }
+        }
+    }
+    let y = if tall { 20 } else { 6 };
+    for (index, title) in SECURITY_STEPS.iter().enumerate() {
+        let (mark, style) = if index < completed {
+            (if ascii { "+" } else { "✓" }, green)
+        } else if index == completed {
+            (">", green)
+        } else {
+            ("·", muted)
+        };
+        frame.render_widget(
+            Paragraph::new(format!("{mark} {title}")).style(style),
+            row(y + index as u16),
+        );
+    }
+    let bar_width = 28.min(width.saturating_sub(6));
+    let filled = bar_width * completed as u16 / 4;
+    frame.render_widget(
+        Paragraph::new(format!(
+            "{}{} {}%",
+            "=".repeat(usize::from(filled)),
+            "·".repeat(usize::from(bar_width - filled)),
+            completed * 25
+        ))
+        .style(green),
+        row(y + 4),
+    );
+    if !ascii {
+        for dx in 0..filled {
+            frame.buffer_mut()[(x + dx, area.y + y + 4)]
+                .set_symbol(" ")
+                .set_bg(color(GREEN));
+        }
+    }
+    if completed == 4 {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("Ключ профиля создан. ", green),
+                Span::styled("Закрытые ключи не покидают устройство.", muted),
+            ]))
+            .wrap(Wrap { trim: false }),
+            Rect::new(x, area.y + y + 6, width, 2),
+        );
+    }
+    if let Some(name) = name {
+        let prefix = if width >= 60 {
+            "? Имя (до 64 байт UTF-8): "
+        } else {
+            "? Имя: "
+        };
+        let prefix_width = unicode_width::UnicodeWidthStr::width(prefix) as u16;
+        frame.render_widget(
+            Paragraph::new(format!("{prefix}{}", safe(name))).style(green),
+            row(y + 8),
+        );
+        frame.set_cursor_position((
+            x + (prefix_width + unicode_width::UnicodeWidthStr::width(name) as u16)
+                .min(width.saturating_sub(1)),
+            area.y + y + 8,
+        ));
+    }
+    if !error.is_empty() {
+        frame.render_widget(
+            Paragraph::new(safe(error)).style(Style::default().fg(color(Color::Yellow))),
+            row(area.height - 3),
+        );
+    }
+    frame.render_widget(
+        Paragraph::new(if name.is_some() {
+            "Enter далее · Esc отменить · Ctrl+C выход"
+        } else {
+            "Esc отменить · Ctrl+C выход"
+        })
+        .style(muted),
+        row(area.height - 1),
+    );
+}
 pub fn draw(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures, ascii: bool) {
     draw_content(frame, wizard, pictures, ascii);
     pictures.colors.apply(frame.buffer_mut(), ascii);
 }
 fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures, ascii: bool) {
+    if wizard.step == Step::Name {
+        draw_security(frame, 4, Some(&wizard.name), &wizard.error, ascii);
+        return;
+    }
     let area = frame.area();
     let color = |c| if ascii { Color::Reset } else { c };
     let muted = Style::default().fg(color(MUTED));
@@ -179,44 +387,7 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
             .wrap(Wrap { trim: false }),
         row(3, 2),
     );
-    if wizard.step == Step::Name {
-        let tall = area.height >= 29 && !ascii;
-        if tall {
-            frame.render_widget(
-                Paragraph::new(
-                    SHIELD
-                        .iter()
-                        .map(|s| Line::from(s.replace('#', "█")))
-                        .collect::<Vec<_>>(),
-                )
-                .style(green),
-                Rect::new(x + 2, area.y + 6, 20, 13),
-            );
-        }
-        let y = if tall { 20 } else { 6 };
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::from(Span::styled(
-                    "✓ Криптографические ключи подготовлены",
-                    green,
-                )),
-                Line::from("  Хранилище будет создано после выбора аватара."),
-            ]),
-            row(y, 2),
-        );
-        frame.render_widget(
-            Paragraph::new("Как вас зовут? Это имя увидят ваши собеседники.").style(muted),
-            row(y + 3, 1),
-        );
-        let prompt = format!("Имя: {}", safe(&wizard.name));
-        frame.render_widget(Paragraph::new(prompt).style(green), row(y + 4, 1));
-        frame.set_cursor_position((
-            x + 5
-                + unicode_width::UnicodeWidthStr::width(wizard.name.as_str())
-                    .min(width.saturating_sub(6) as usize) as u16,
-            area.y + y + 4,
-        ));
-    } else {
+    {
         frame.render_widget(
             Paragraph::new(format!("Имя: {}", safe(&wizard.name))),
             row(6, 1),
@@ -310,6 +481,51 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
         row(area.height - 1, 1),
     );
 }
+async fn prepare_screen(
+    root: &Path,
+    terminal: &mut ratatui::DefaultTerminal,
+    pictures: &mut Pictures,
+    ascii: bool,
+) -> Result<Option<ProfileKeys>> {
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let root = root.to_owned();
+    let job = tokio::task::spawn_blocking(move || {
+        prepare(&root, |stage| {
+            let _ = sender.send(stage);
+            // Give each real preparation stage a readable frame. Checkmarks
+            // are only shown when that operation has actually finished.
+            if stage < 4 {
+                std::thread::sleep(Duration::from_millis(300));
+            }
+        })
+    });
+    let mut completed = 0;
+    loop {
+        while let Ok(stage) = receiver.try_recv() {
+            completed = stage;
+        }
+        pictures.clear_on_change(terminal, (10 + completed as u8, 0))?;
+        terminal.draw(|frame| draw_preparation(frame, completed, pictures, ascii))?;
+        if job.is_finished() {
+            return Ok(Some(job.await??));
+        }
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press
+                    && (key.code == KeyCode::Esc || crate::ui::is_quit_key(key))
+                {
+                    // Let the worker remove temporary storage and zeroize its
+                    // keys before returning; no identity has been published.
+                    let _ = job.await?;
+                    pictures.clear_graphics(terminal)?;
+                    return Ok(None);
+                }
+            }
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 /// No persistent profile exists until the avatar is confirmed. Cancelling drops the prepared keys.
 pub async fn run(
     root: &Path,
@@ -317,20 +533,34 @@ pub async fn run(
     mode: KeyMode,
     settings: Settings,
 ) -> Result<Option<Created>> {
+    run_named(root, ascii, mode, settings, None).await
+}
+
+pub async fn run_named(
+    root: &Path,
+    ascii: bool,
+    mode: KeyMode,
+    settings: Settings,
+    name: Option<&str>,
+) -> Result<Option<Created>> {
     settings.validate()?;
-    let mut keys = Some(ProfileKeys::generate()?);
-    let seed = shum_core::crypto::avatar_seed(&keys.as_ref().unwrap().noise.noise_public());
-    let mut wizard = Wizard {
-        step: Step::Name,
-        name: String::new(),
-        seed,
-        error: String::new(),
-        file_keys: matches!(mode.backend()?, shum_store::vault::KeyBackend::File),
-    };
+    let file_keys = matches!(mode.backend()?, shum_store::vault::KeyBackend::File);
     let mut terminal = ratatui::init();
     let _guard = crate::ui::TerminalGuard;
     let mut pictures = Pictures::new(crate::ui::picture_picker(ascii));
     crossterm::execute!(std::io::stdout(), event::EnableBracketedPaste)?;
+    let Some(prepared) = prepare_screen(root, &mut terminal, &mut pictures, ascii).await? else {
+        return Ok(None);
+    };
+    let mut keys = Some(prepared);
+    let mut avatar_started = false;
+    let mut wizard = Wizard {
+        step: Step::Name,
+        name: name.unwrap_or_default().into(),
+        seed: 0,
+        error: String::new(),
+        file_keys,
+    };
     let mut created = None;
     let mut saving: Option<tokio::task::JoinHandle<Result<Created>>> = None;
     loop {
@@ -342,7 +572,14 @@ pub async fn run(
                 }
                 Err(error) => {
                     wizard.error = error.to_string();
-                    keys = Some(ProfileKeys::generate()?);
+                    let Some(prepared) =
+                        prepare_screen(root, &mut terminal, &mut pictures, ascii).await?
+                    else {
+                        return Ok(None);
+                    };
+                    wizard.seed = 0;
+                    avatar_started = false;
+                    keys = Some(prepared);
                     wizard.step = Step::Name;
                 }
             }
@@ -370,19 +607,13 @@ pub async fn run(
                         return Ok(None);
                     }
                     (Step::Name, KeyCode::Enter) => {
-                        let validation = validate_name(&wizard.name).and_then(|()| {
-                            if Profiles::new(root)?
-                                .list()?
-                                .1
-                                .iter()
-                                .any(|p| p.name == wizard.name)
-                            {
-                                bail!("Такое имя уже есть. Выберите другое.");
-                            }
-                            Ok(())
-                        });
+                        let validation = validate_name(&wizard.name);
                         match validation {
                             Ok(()) => {
+                                if !avatar_started {
+                                    wizard.seed = initial_seed(keys.as_ref().unwrap());
+                                    avatar_started = true;
+                                }
                                 wizard.step = Step::Avatar;
                                 wizard.error.clear();
                             }

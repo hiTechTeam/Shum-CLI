@@ -29,7 +29,7 @@ const HELP_STYLES: clap::builder::Styles = clap::builder::Styles::styled()
 )]
 struct Args {
     #[arg(short = 'p', long, global = true)]
-    /// Имя или ID локального профиля
+    /// ID локального профиля из shum profile list
     profile: Option<String>,
     #[arg(long, global = true)]
     /// Вывод JSON для скриптов
@@ -167,6 +167,12 @@ enum Commands {
         /// Остановить все службы и удалить автозапуск, сохранив данные
         #[arg(long)]
         uninstall: bool,
+        /// Также безвозвратно удалить все профили, ключи и историю
+        #[arg(long, requires = "uninstall")]
+        purge: bool,
+        /// Подтверждение полного удаления: DELETE
+        #[arg(long, requires = "purge")]
+        confirm: Option<String>,
         /// Used by the standalone installer to update active profiles only
         #[arg(long, hide = true, conflicts_with = "uninstall")]
         refresh: bool,
@@ -176,10 +182,12 @@ enum Commands {
 enum ProfileCommand {
     List,
     Use {
-        name: String,
+        #[arg(value_name = "PROFILE_ID")]
+        id: String,
     },
     Delete {
-        name: Option<String>,
+        #[arg(value_name = "PROFILE_ID")]
+        id: String,
         #[arg(long)]
         confirm: Option<String>,
     },
@@ -269,20 +277,38 @@ async fn run(args: Args) -> Result<()> {
     let _build = shum_cli::identity::current()?;
     let palette = Palette::stdout(args.ascii);
     let root = root(&args)?;
-    if matches!(
-        args.command,
-        Some(Commands::Daemon {
-            uninstall: true,
-            ..
-        })
-    ) {
-        let result = shum_cli::service::uninstall(&root, args.data_dir.is_none()).await?;
+    if let Some(Commands::Daemon {
+        uninstall: true,
+        purge,
+        confirm,
+        ..
+    }) = &args.command
+    {
+        let result = if *purge {
+            let typed = match confirm {
+                Some(value) => value.clone(),
+                None if io::stdin().is_terminal() && !args.json => terminal::prompt(
+                    "Все профили, ключи и переписка будут удалены безвозвратно. Введите DELETE: ",
+                )?,
+                _ => bail!("Для полного удаления укажите --confirm DELETE"),
+            };
+            if typed != "DELETE" {
+                bail!("Подтверждение не совпало, удаление отменено");
+            }
+            shum_cli::service::purge(&root, args.data_dir.is_none()).await?
+        } else {
+            shum_cli::service::uninstall(&root, args.data_dir.is_none()).await?
+        };
         return output(
             result,
             args.json,
             &palette.paint(
                 Tone::Accent,
-                "Службы и автозапуск удалены. Данные профилей сохранены.",
+                if *purge {
+                    "Службы, профили, ключи и переписка удалены. Пакет Homebrew: brew uninstall shum."
+                } else {
+                    "Службы и автозапуск удалены. Данные профилей сохранены."
+                },
             ),
         );
     }
@@ -312,8 +338,20 @@ async fn run(args: Args) -> Result<()> {
         } else {
             KeyMode::Auto
         };
-        let name = name.as_ref().or(args.profile.as_ref());
-        let created = if let Some(name) = name {
+        let name = name.as_ref();
+        let created = if !headless
+            && io::stdin().is_terminal()
+            && io::stdout().is_terminal()
+            && !args.json
+        {
+            let Some(created) =
+                onboarding::run_named(&root, args.ascii, mode, settings, name.map(String::as_str))
+                    .await?
+            else {
+                return Ok(());
+            };
+            created
+        } else if let Some(name) = name {
             onboarding::create(
                 &root,
                 name,
@@ -382,37 +420,45 @@ async fn run(args: Args) -> Result<()> {
                     terminal::safe(&p.name)
                 )
             );
+            println!("  ID: {}", p.id);
         }
         return Ok(());
     }
     if let Some(Commands::Profile {
-        command: Some(ProfileCommand::Use { name }),
+        command: Some(ProfileCommand::Use { id }),
     }) = &args.command
     {
-        profiles.select(name)?;
+        let profile = ipc::select(&profiles, Some(id))?;
+        profiles.select(id)?;
         return output(
-            json!({"selected":name}),
+            json!({"selected":id}),
             args.json,
             &palette.paint(
                 Tone::Accent,
-                format!("Выбран профиль {}", terminal::safe(name)),
+                format!(
+                    "Выбран профиль {} (ID {})",
+                    terminal::safe(&profile.name),
+                    id
+                ),
             ),
         );
     }
-    let profile = ipc::select(&profiles, args.profile.as_deref())?;
-    if let Some(Commands::Daemon { run: true, .. }) = &args.command {
-        return ipc::serve(&root, &profile.id).await;
-    }
     if let Some(Commands::Profile {
-        command: Some(ProfileCommand::Delete { name, confirm }),
+        command: Some(ProfileCommand::Delete { id, confirm }),
     }) = &args.command
     {
-        let profile = ipc::select(&profiles, name.as_deref().or(args.profile.as_deref()))?;
+        let profile = profiles
+            .list()?
+            .1
+            .into_iter()
+            .find(|profile| &profile.id == id)
+            .context("Укажите полный ID профиля из shum profile list; удаление по имени не поддерживается")?;
         let typed = match confirm {
             Some(name) => name.clone(),
             None if io::stdin().is_terminal() && !args.json => terminal::prompt(&format!(
-                "Удалить профиль и историю? Введите имя {}: ",
-                terminal::safe(&profile.name)
+                "Удалить профиль {} (ID {}) и историю? Введите имя для подтверждения: ",
+                terminal::safe(&profile.name),
+                profile.id
             ))?,
             _ => bail!("Для удаления укажите --confirm {:?}", profile.name),
         };
@@ -426,6 +472,10 @@ async fn run(args: Args) -> Result<()> {
             args.json,
             &palette.paint(Tone::Accent, "Профиль удалён"),
         );
+    }
+    let profile = ipc::select(&profiles, args.profile.as_deref())?;
+    if let Some(Commands::Daemon { run: true, .. }) = &args.command {
+        return ipc::serve(&root, &profile.id).await;
     }
     if matches!(args.command, Some(Commands::Lock)) {
         ipc::stop(&root, &profile.id).await?;

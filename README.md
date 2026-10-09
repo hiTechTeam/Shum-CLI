@@ -51,6 +51,10 @@ In an open chat, `/invite` invites that peer. `/qr` shows your own card. Use `/h
 
 The service keeps running after the interface closes. `shum daemon --stop` stops it; `shum daemon --install` enables login startup. After an update, the next CLI command replaces an outdated service and preserves the outgoing queue. Allow Bluetooth access for Shum when macOS asks.
 
+For local profiles, use the full ID from `shum profile list`: `shum profile use 'PROFILE_ID'`, `shum -p 'PROFILE_ID' chats`, or `shum profile delete 'PROFILE_ID'`. The deletion prompt shows the name and ID; the name confirms the operation and never selects its target.
+
+In development for the next release: registration shows key generation, encryption, protected storage and verification before asking for a name. The first avatar is then derived from the public signing key, as on iPhone. Keys stay in memory until the avatar is confirmed; preparation uses temporary encrypted storage. Profiles may share a display name and have independent IDs, keys and history.
+
 ## Uninstall
 
 For Homebrew:
@@ -66,7 +70,18 @@ For the script installation:
 curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh | sh -s -- --uninstall
 ```
 
-Profile data stays in `~/Library/Application Support/org.Shum.Shum` or your `--data-dir`; profile keys may be in Keychain. To erase everything, stop services, delete your data directory manually, and remove the profile's Shum items from Keychain.
+Profile data stays in `~/Library/Application Support/org.Shum.Shum` or your `--data-dir`; profile keys may be in Keychain.
+
+The next release also supports irreversible deletion of all profiles, keys (including Keychain), history and service caches:
+
+```sh
+shum daemon --uninstall --purge
+brew uninstall shum
+```
+
+Type `DELETE` when prompted. For scripts, add `--confirm DELETE`. This option is not in 0.1.6. Without `--data-dir`, it includes the default directory and other data directories registered in your Shum LaunchAgents. With `--data-dir`, it removes only that directory's Shum data. Unrelated files are preserved and reported. The package manager or installation script removes the installed application separately.
+
+For 0.1.6, delete each profile with `shum profile delete 'PROFILE_ID'` before uninstalling services and the package. This removes its Keychain keys too. You can then delete the remaining data directory manually.
 
 If the binary is already gone, unload each Shum LaunchAgent, then delete its plist:
 

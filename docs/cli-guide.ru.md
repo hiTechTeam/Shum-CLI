@@ -265,7 +265,7 @@ rm "$HOME/Library/LaunchAgents/org.shum.cli.<ID_профиля>.plist"
 ```sh
 shum profile
 shum profile list
-shum profile use "Работа"
+shum profile use 'PROFILE_ID'
 shum profile name "Новое имя"
 shum profile bio "О себе"
 shum profile avatar --random
@@ -356,7 +356,10 @@ shum --push-url off status
 а `pushScheduled` означает, что очередь выдала действие push, без подтверждения HTTP.
 
 Удалять только ненужный профиль, подтверждая его имя:
-`shum profile delete Test --confirm Test`. Имя должно совпасть точно.
+`shum profile delete 'PROFILE_ID' --confirm Test`. ID берётся из
+`shum profile list`, имя только подтверждает удаление выбранного профиля.
+В следующем выпуске имена локальных профилей могут совпадать; выбор, открытие
+через `-p` и удаление используют полный ID.
 
 ## CI
 

@@ -34,8 +34,8 @@ pub fn select(profiles: &Profiles, selector: Option<&str>) -> Result<Profile> {
         .or(selected.as_deref())
         .ok_or_else(|| anyhow!("Профиля пока нет. Выполните shum init."))?;
     list.into_iter()
-        .find(|p| !p.deleting && (p.id == name || p.name == name))
-        .ok_or_else(|| anyhow!("Профиль не найден: {name}"))
+        .find(|p| !p.deleting && p.id == name)
+        .ok_or_else(|| anyhow!("Профиль не найден: {name}. Укажите ID из shum profile list."))
 }
 fn endpoint(root: &Path, id: &str) -> PathBuf {
     root.join(id).join("daemon.json")

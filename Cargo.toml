@@ -11,10 +11,10 @@ name = "shum"
 path = "src/main.rs"
 
 [dependencies]
-shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
-shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
-shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
-shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "4020dfd25bcbfd7a60040c435b065665c8d11684" }
+shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "93df2317c4fbbca8f405f643f7609aa7c1da91f7" }
+shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "93df2317c4fbbca8f405f643f7609aa7c1da91f7" }
+shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "93df2317c4fbbca8f405f643f7609aa7c1da91f7" }
+shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "93df2317c4fbbca8f405f643f7609aa7c1da91f7" }
 anyhow = "1"
 fs2 = "0.4.3"
 base64 = "0.22.1"

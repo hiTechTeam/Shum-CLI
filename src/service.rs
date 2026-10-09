@@ -307,6 +307,20 @@ pub async fn refresh(root: &Path, all_registered: bool) -> Result<serde_json::Va
 /// With an explicit data directory, only uninstall that root. Otherwise include
 /// all Shum roots registered in the user's LaunchAgents. Never open a key vault.
 pub async fn uninstall(root: &Path, all_registered: bool) -> Result<serde_json::Value> {
+    uninstall_inner(root, all_registered, false).await
+}
+
+/// Explicit, confirmed deletion of profile vaults and history. Package files are
+/// owned by the package manager and must be uninstalled separately.
+pub async fn purge(root: &Path, all_registered: bool) -> Result<serde_json::Value> {
+    uninstall_inner(root, all_registered, true).await
+}
+
+async fn uninstall_inner(
+    root: &Path,
+    all_registered: bool,
+    purge: bool,
+) -> Result<serde_json::Value> {
     let (roots, profiles, agents) = service_profiles(root, all_registered)?;
     #[cfg(not(target_os = "macos"))]
     let _ = &agents;
@@ -316,9 +330,39 @@ pub async fn uninstall(root: &Path, all_registered: bool) -> Result<serde_json::
             locks.push(control_lock(root).await?);
         }
     }
+    // Validate registries before stopping anything. Never recursively erase an
+    // arbitrary --data-dir, or orphaned directories whose vault is unknown.
+    let mut registries = Vec::new();
+    if purge {
+        for root in &roots {
+            if !root.exists() {
+                continue;
+            }
+            let registry = shum_store::profiles::Profiles::new(root)?;
+            let (_, registered) = registry.list()?;
+            for (_, id) in profiles.iter().filter(|(path, _)| path == root) {
+                if !registered.iter().any(|profile| &profile.id == id) {
+                    bail!(
+                        "Профиль {id} отсутствует в реестре {}; полное удаление отменено",
+                        root.display()
+                    );
+                }
+            }
+            registries.push((root, registry, registered));
+        }
+    }
     // A failed graceful stop aborts removal: don't erase a running bundle.
     for (root, id) in &profiles {
         crate::ipc::stop(root, id).await?;
+    }
+    // A registry may retain a profile with a missing directory after an
+    // interrupted deletion. Include these entries when stopping services too.
+    for (root, _, registered) in &registries {
+        for profile in registered {
+            if !profiles.contains(&((*root).clone(), profile.id.clone())) {
+                crate::ipc::stop(root, &profile.id).await?;
+            }
+        }
     }
     #[cfg(target_os = "macos")]
     for agent in &agents {
@@ -357,6 +401,52 @@ pub async fn uninstall(root: &Path, all_registered: bool) -> Result<serde_json::
     let mut caches = 0;
     for root in &roots {
         caches += remove_caches(root)?;
+    }
+    if purge {
+        let mut deleted = 0;
+        for (_, registry, registered) in registries {
+            for profile in registered {
+                registry.delete(&profile.id).with_context(|| {
+                    format!(
+                        "Не удалось удалить профиль {}; оставшиеся данные сохранены",
+                        profile.id
+                    )
+                })?;
+                deleted += 1;
+            }
+        }
+        drop(locks);
+        let mut remaining = Vec::new();
+        for root in &roots {
+            if !root.exists() {
+                continue;
+            }
+            for name in ["profiles.json", "profiles.lock", "service-control.lock"] {
+                let path = root.join(name);
+                match std::fs::symlink_metadata(&path) {
+                    Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+                        std::fs::remove_file(path)?;
+                    }
+                    Ok(_) => bail!("Недействительный файл реестра: {}", path.display()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            if std::fs::read_dir(root)?.next().is_none() {
+                std::fs::remove_dir(root)?;
+            } else {
+                remaining.push(root.display().to_string());
+            }
+        }
+        if !remaining.is_empty() {
+            bail!(
+                "Профили удалены, но посторонние файлы сохранены в: {}",
+                remaining.join(", ")
+            );
+        }
+        return Ok(
+            serde_json::json!({"uninstalled": true, "purged": true, "profilesDeleted": deleted, "bundlesRemoved": caches}),
+        );
     }
     Ok(
         serde_json::json!({"uninstalled": true, "profilesPreserved": profiles.len(), "bundlesRemoved": caches}),
