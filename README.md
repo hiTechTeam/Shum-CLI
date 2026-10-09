@@ -6,7 +6,7 @@ Terminal client for Shum, built on [Shum Core](https://github.com/hiTechTeam/Shu
 
 ## Install
 
-Current release: **0.1.6 preview, macOS 15+, Apple Silicon and Intel**.
+Current release: **0.1.7 preview, macOS 15+, Apple Silicon and Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -53,7 +53,7 @@ The service keeps running after the interface closes. `shum daemon --stop` stops
 
 For local profiles, use the full ID from `shum profile list`: `shum profile use 'PROFILE_ID'`, `shum -p 'PROFILE_ID' chats`, or `shum profile delete 'PROFILE_ID'`. The deletion prompt shows the name and ID; the name confirms the operation and never selects its target.
 
-In development for the next release: registration shows key generation, encryption, protected storage and verification before asking for a name. The first avatar is then derived from the public signing key, as on iPhone. Keys stay in memory until the avatar is confirmed; preparation uses temporary encrypted storage. Profiles may share a display name and have independent IDs, keys and history.
+Registration animates key assembly, smoothly fills a progress bar and checks off key generation, encryption, protected storage and verification before asking for a name. The first avatar is then derived from the public signing key, as on iPhone. Keys stay in memory until the avatar is confirmed; preparation uses temporary encrypted storage. Profiles may share a display name and have independent IDs, keys and history.
 
 ## Uninstall
 
@@ -72,14 +72,14 @@ curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh
 
 Profile data stays in `~/Library/Application Support/org.Shum.Shum` or your `--data-dir`; profile keys may be in Keychain.
 
-The next release also supports irreversible deletion of all profiles, keys (including Keychain), history and service caches:
+To irreversibly delete all profiles, keys (including Keychain), history and service caches:
 
 ```sh
 shum daemon --uninstall --purge
 brew uninstall shum
 ```
 
-Type `DELETE` when prompted. For scripts, add `--confirm DELETE`. This option is not in 0.1.6. Without `--data-dir`, it includes the default directory and other data directories registered in your Shum LaunchAgents. With `--data-dir`, it removes only that directory's Shum data. Unrelated files are preserved and reported. The package manager or installation script removes the installed application separately.
+Type `DELETE` when prompted. For scripts, add `--confirm DELETE`. Available since 0.1.7. Without `--data-dir`, it includes the default directory and other data directories registered in your Shum LaunchAgents. With `--data-dir`, it removes only that directory's Shum data. Unrelated files are preserved and reported. The package manager or installation script removes the installed application separately.
 
 For 0.1.6, delete each profile with `shum profile delete 'PROFILE_ID'` before uninstalling services and the package. This removes its Keychain keys too. You can then delete the remaining data directory manually.
 
@@ -104,7 +104,7 @@ CLI and Core are separate repositories and releases. Core dependencies pin one G
 
 The 0.1.6 release passed 31 CLI tests and Rosetta messaging checks. Homebrew upgrade, automatic service replacement and messages in both directions with an iPhone were verified. Bluetooth permission was requested again during the transition from ad hoc to certificate signing; the next certificate-to-certificate upgrade remains to be checked.
 
-[Release verification](docs/release-verification.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
+[Release verification](docs/release-verification-0.1.7.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
 ## License
 

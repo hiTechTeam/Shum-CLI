@@ -24,12 +24,7 @@ impl DirectImages {
             self.pngs.clear();
         }
         let png = self.pngs.entry(seed).or_insert_with(|| {
-            let pixels = crate::avatar::render_subject(seed)
-                .pixels
-                .into_iter()
-                .flatten()
-                .collect();
-            let image = image::RgbaImage::from_raw(36, 36, pixels).expect("36x36 avatar");
+            let image = crate::avatar::terminal_image(seed);
             let mut png = Cursor::new(Vec::new());
             image
                 .write_to(&mut png, image::ImageFormat::Png)
@@ -39,7 +34,7 @@ impl DirectImages {
         // Explicitly delete this slot before replacing it. Text erase sequences
         // do not delete graphic placements. q=2 suppresses terminal replies.
         let mut sequence = delete(id);
-        // PNGs are small, but respect the protocol's 4096-byte chunk limit.
+        // High-resolution PNGs may span multiple protocol chunks.
         let chunks = png.as_bytes().chunks(4096);
         let count = chunks.len();
         for (index, chunk) in chunks.enumerate() {

@@ -127,6 +127,20 @@ pub fn render_subject(seed: u64) -> Avatar {
         pixels: render_impl(seed, false, 36),
     }
 }
+/// Supply a sharp PNG to terminals that interpolate small images themselves.
+/// Integer nearest-neighbour enlargement preserves every v1 pixel and alpha;
+/// it changes client presentation only, not avatar geometry or protocol data.
+pub const PNG_SCALE: u32 = 16;
+pub fn terminal_image(seed: u64) -> image::RgbaImage {
+    let pixels = render_subject(seed).pixels.into_iter().flatten().collect();
+    let source = image::RgbaImage::from_raw(36, 36, pixels).expect("36x36 avatar");
+    image::imageops::resize(
+        &source,
+        36 * PNG_SCALE,
+        36 * PNG_SCALE,
+        image::imageops::FilterType::Nearest,
+    )
+}
 pub const CELL_SIDE: u16 = 12;
 pub const CELL_WIDTH: u16 = CELL_SIDE * 2;
 /// Font-independent client rendition: two background spaces per square pixel.

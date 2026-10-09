@@ -39,11 +39,16 @@ for program in (["Apple_Terminal"] if legacy else ["Apple_Terminal", "WarpTermin
                     raw.extend(os.read(master, 65536))
 
         try:
-            for _ in range(100):
+            started = time.monotonic()
+            for _ in range(130):
                 pump(.1)
-                if "Имя:".encode() in raw:
+                if "? Имя".encode() in raw:
                     break
-            assert "Имя:".encode() in raw, raw[-1000:]
+            assert "? Имя".encode() in raw, raw[-1000:]
+            assert time.monotonic() - started >= 6, "security animation was skipped"
+            assert raw.count("✓".encode()) >= 4, "missing security checkmarks"
+            assert "Аватар".encode() not in raw, "avatar shown before name"
+            print("PASS animated preparation precedes Name and Avatar")
             os.write(master, b"Display test\r")
             pump(1)
             assert "Аватар".encode() in raw
@@ -63,10 +68,21 @@ for program in (["Apple_Terminal"] if legacy else ["Apple_Terminal", "WarpTermin
                 assert rgb
                 assert b'\x1b_Ga=d,d=I,' in raw, 'Warp requires explicit graphics deletion'
                 assert b'\x1b]1337;' not in raw, 'do not use random iTerm image placements in Warp'
-                pngs = re.findall(rb"\x1b_Ga=T,[^;]*;([A-Za-z0-9+/=]+)\x1b\\", raw)
-                assert pngs, "Warp did not receive a native image"
-                png = base64.b64decode(pngs[-1])
+                pngs = []
+                chunks = bytearray()
+                for header, payload in re.findall(rb"\x1b_G([^;]*);([^\x1b]*)\x1b\\", raw):
+                    if header.startswith(b"a=T,"):
+                        chunks.clear()
+                    elif not header.startswith(b"m="):
+                        continue
+                    assert len(payload) <= 4096
+                    chunks.extend(payload)
+                    if b"m=0" in header:
+                        pngs.append(base64.b64decode(chunks, validate=True))
+                assert pngs, "Warp did not receive a complete native image"
+                png = pngs[-1]
                 assert png.startswith(b"\x89PNG\r\n\x1a\n")
+                assert struct.unpack(">II", png[16:24]) == (576, 576)
                 destination = pathlib.Path("/tmp/shum-terminal-review/warp-avatar.png")
                 destination.parent.mkdir(exist_ok=True)
                 destination.write_bytes(png)

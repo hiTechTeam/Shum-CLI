@@ -57,13 +57,13 @@ Silicon не заменяет настоящий Intel Mac. Windows и Linux н�
 Проверка пакета без установки:
 
 ```sh
-python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.6-macOS-universal-unsigned.pkg
+python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.7-macOS-universal-unsigned.pkg
 ```
 
 ## Homebrew
 
 Публичный tap: [hiTechTeam/homebrew-shum](https://github.com/hiTechTeam/homebrew-shum).
-Формула 0.1.6 устанавливает `Shum.app` в `prefix`, создаёт ссылку
+Формула 0.1.7 устанавливает `Shum.app` в `prefix`, создаёт ссылку
 `bin/shum`, проверяет SHA-256 и версию:
 
 ```sh
@@ -156,8 +156,8 @@ ad hoc подпись не подставляется автоматически
 
 Удаление: сначала `shum daemon --uninstall`, затем `brew uninstall shum`.
 Формула сообщает этот порядок одной строкой caveats. Данные сохраняются.
-Каталог macOS: `~/Library/Application Support/org.Shum.Shum`. В следующем выпуске
-для полного стирания предусмотрена команда `shum daemon --uninstall --purge`,
+Каталог macOS: `~/Library/Application Support/org.Shum.Shum`. С версии 0.1.7
+для полного стирания доступна команда `shum daemon --uninstall --purge`,
 с подтверждением `DELETE` (для скриптов: `--confirm DELETE`). Она удаляет
 профили штатным способом, включая ключи в Keychain, и очищает реестр и кэш служб.
 Без `--data-dir` обрабатываются стандартный каталог и корни из LaunchAgents;

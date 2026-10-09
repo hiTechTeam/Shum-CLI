@@ -19,7 +19,13 @@ use shum_store::{
     profiles::{Profile, Profiles},
     vault::{KeyMode, ProfileKeys},
 };
-use std::{path::Path, time::Duration};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
+
+mod animation;
+pub use animation::CreationAnimation;
 
 /// Like iOS registration, choose the first portrait from the profile's public
 /// signing key. The selected seed is explicit in the signed transport card;
@@ -91,21 +97,6 @@ pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKe
     Ok(keys)
 }
 
-const SHIELD: [&str; 13] = [
-    "  ############  ",
-    " #            # ",
-    "#    ######    #",
-    "#   #      #   #",
-    "#   #  ##  #   #",
-    "#   # #### #   #",
-    "#    ######    #",
-    "#       #      #",
-    " #      #     # ",
-    "  #     #### #  ",
-    "   #    # # #   ",
-    "    #   ## #    ",
-    "     ######     ",
-];
 #[derive(Clone)]
 pub struct Settings {
     pub bluetooth: bool,
@@ -222,17 +213,33 @@ pub fn draw_preparation(
     pictures: &mut Pictures,
     ascii: bool,
 ) {
-    draw_security(frame, completed.min(4), None, "", ascii);
+    draw_animated_preparation(
+        frame,
+        &CreationAnimation::settled(completed.min(4)),
+        pictures,
+        ascii,
+    );
+}
+
+/// Render a frame of the preparation ceremony without publishing an identity.
+pub fn draw_animated_preparation(
+    frame: &mut Frame<'_>,
+    animation: &CreationAnimation,
+    pictures: &mut Pictures,
+    ascii: bool,
+) {
+    draw_security(frame, animation, None, "", ascii);
     pictures.colors.apply(frame.buffer_mut(), ascii);
 }
 
 fn draw_security(
     frame: &mut Frame<'_>,
-    completed: usize,
+    animation: &CreationAnimation,
     name: Option<&str>,
     error: &str,
     ascii: bool,
 ) {
+    let completed = animation.completed();
     let area = frame.area();
     let color = |c| if ascii { Color::Reset } else { c };
     let green = Style::default().fg(color(GREEN));
@@ -260,41 +267,46 @@ fn draw_security(
     );
     let tall = area.height >= 32 && area.width >= 40 && !ascii;
     if tall {
-        // Solid background cells avoid seams from block glyphs in Terminal.
-        for (y, line) in SHIELD.iter().enumerate() {
-            for (column, pixel) in line.chars().enumerate() {
-                if pixel == '#' {
-                    for dx in 0..2 {
-                        frame.buffer_mut()[(x + 2 + column as u16 * 2 + dx, area.y + 6 + y as u16)]
-                            .set_symbol(" ")
-                            .set_bg(color(GREEN));
-                    }
-                }
-            }
-        }
+        animation::draw_key(frame, x + 2, area.y + 6, 13, animation);
     }
     let y = if tall { 20 } else { 6 };
     for (index, title) in SECURITY_STEPS.iter().enumerate() {
         let (mark, style) = if index < completed {
             (if ascii { "+" } else { "✓" }, green)
         } else if index == completed {
-            (">", green)
+            ("", green)
         } else {
             ("·", muted)
         };
+        let mark = if index == completed {
+            animation.spinner().to_string()
+        } else {
+            mark.into()
+        };
         frame.render_widget(
-            Paragraph::new(format!("{mark} {title}")).style(style),
+            Paragraph::new(Line::from(vec![
+                Span::styled(format!("{mark} "), style),
+                Span::styled(
+                    *title,
+                    if index <= completed {
+                        Style::default()
+                    } else {
+                        muted
+                    },
+                ),
+            ])),
             row(y + index as u16),
         );
     }
-    let bar_width = 28.min(width.saturating_sub(6));
-    let filled = bar_width * completed as u16 / 4;
+    let bar_width = 32.min(width.saturating_sub(6));
+    let percent = animation.percent();
+    let filled = bar_width * percent / 100;
     frame.render_widget(
         Paragraph::new(format!(
             "{}{} {}%",
             "=".repeat(usize::from(filled)),
             "·".repeat(usize::from(bar_width - filled)),
-            completed * 25
+            percent
         ))
         .style(green),
         row(y + 4),
@@ -355,7 +367,13 @@ pub fn draw(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures, asc
 }
 fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures, ascii: bool) {
     if wizard.step == Step::Name {
-        draw_security(frame, 4, Some(&wizard.name), &wizard.error, ascii);
+        draw_security(
+            frame,
+            &CreationAnimation::settled(4),
+            Some(&wizard.name),
+            &wizard.error,
+            ascii,
+        );
         return;
     }
     let area = frame.area();
@@ -489,34 +507,44 @@ async fn prepare_screen(
 ) -> Result<Option<ProfileKeys>> {
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     let root = root.to_owned();
-    let job = tokio::task::spawn_blocking(move || {
+    let mut job = Some(tokio::task::spawn_blocking(move || {
         prepare(&root, |stage| {
             let _ = sender.send(stage);
-            // Give each real preparation stage a readable frame. Checkmarks
-            // are only shown when that operation has actually finished.
-            if stage < 4 {
-                std::thread::sleep(Duration::from_millis(300));
-            }
         })
-    });
-    let mut completed = 0;
+    }));
+    let mut ready = 0;
+    let mut prepared = None;
+    let mut animation = CreationAnimation::default();
+    let mut last_tick = Instant::now();
+    // Security uses cells, not inline images. Keep the scene stable while
+    // animating so Warp does not clear the screen on every stage or frame.
+    pictures.clear_on_change(terminal, (10, 0))?;
     loop {
         while let Ok(stage) = receiver.try_recv() {
-            completed = stage;
+            ready = stage;
         }
-        pictures.clear_on_change(terminal, (10 + completed as u8, 0))?;
-        terminal.draw(|frame| draw_preparation(frame, completed, pictures, ascii))?;
-        if job.is_finished() {
-            return Ok(Some(job.await??));
+        if job.as_ref().is_some_and(|job| job.is_finished()) {
+            prepared = Some(job.take().unwrap().await??);
+            ready = 4;
         }
-        if event::poll(Duration::from_millis(50))? {
+        let now = Instant::now();
+        animation.advance(ready, now.duration_since(last_tick));
+        last_tick = now;
+        terminal.draw(|frame| draw_animated_preparation(frame, &animation, pictures, ascii))?;
+        // Leave the completed key and all four checkmarks visible for 450 ms
+        // before revealing Name, as in the Swift registration ceremony.
+        if animation.finished() {
+            return Ok(prepared);
+        }
+        if event::poll(Duration::from_millis(33))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press
                     && (key.code == KeyCode::Esc || crate::ui::is_quit_key(key))
                 {
-                    // Let the worker remove temporary storage and zeroize its
-                    // keys before returning; no identity has been published.
-                    let _ = job.await?;
+                    if let Some(job) = job.take() {
+                        // Finish temporary-store cleanup before dropping keys.
+                        let _ = job.await?;
+                    }
                     pictures.clear_graphics(terminal)?;
                     return Ok(None);
                 }

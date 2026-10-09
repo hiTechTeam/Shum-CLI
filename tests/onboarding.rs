@@ -138,3 +138,91 @@ fn security_screen_shows_real_progress_then_name_before_avatar() {
         assert!(!text.contains("Аватар"));
     }
 }
+
+#[test]
+fn ceremony_waits_for_operations_and_animates_between_checkmarks() {
+    use shum_cli::onboarding::CreationAnimation;
+    use std::time::Duration;
+    let mut animation = CreationAnimation::default();
+    animation.advance(0, Duration::from_secs(10));
+    assert_eq!(animation.completed(), 0);
+    assert!(animation.percent() < 25);
+    assert!(!animation.finished());
+    animation.advance(1, Duration::from_millis(1));
+    assert_eq!(animation.completed(), 1);
+    animation.advance(1, Duration::from_secs(10));
+    assert_eq!(animation.completed(), 1);
+    assert!(animation.percent() < 50);
+    animation.advance(2, Duration::from_secs(10));
+    assert_eq!(animation.completed(), 2);
+    assert!(animation.percent() < 75);
+    animation.advance(3, Duration::from_secs(10));
+    assert_eq!(animation.completed(), 3);
+    assert!(animation.percent() < 100);
+    assert!(!animation.finished());
+    animation.advance(4, Duration::from_millis(1));
+    assert_eq!(animation.completed(), 4);
+    assert_eq!(animation.percent(), 100);
+    assert!(!animation.finished());
+    animation.advance(4, Duration::from_millis(450));
+    assert!(animation.finished());
+
+    // Fast crypto must still leave enough frames to perceive key assembly,
+    // smooth progress and four distinct checkmarks before the Name prompt.
+    let mut fast = CreationAnimation::default();
+    let mut percentages = std::collections::BTreeSet::new();
+    let mut stages = std::collections::BTreeSet::new();
+    for _ in 0..200 {
+        fast.advance(4, Duration::from_millis(33));
+        percentages.insert(fast.percent());
+        stages.insert(fast.completed());
+    }
+    assert!(percentages.len() > 90);
+    assert_eq!(stages, (0..=4).collect());
+    assert!(fast.finished());
+}
+
+#[test]
+fn key_assembles_in_visible_frames_without_prompting_for_name() {
+    use ratatui::{backend::TestBackend, style::Color, Terminal};
+    use ratatui_image::picker::Picker;
+    use shum_cli::{
+        onboarding::{draw_animated_preparation, CreationAnimation},
+        ui::Pictures,
+    };
+    use std::time::Duration;
+    for (width, height) in [(80, 32), (140, 45)] {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let mut pictures =
+            Pictures::with_colors(Picker::halfblocks(), shum_cli::display::Colors::Rgb);
+        let mut animation = CreationAnimation::default();
+        let mut drawings = Vec::new();
+        for millis in [0, 700, 800, 1500, 1500, 1500, 450] {
+            animation.advance(4, Duration::from_millis(millis));
+            terminal
+                .draw(|frame| draw_animated_preparation(frame, &animation, &mut pictures, false))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let text = buffer
+                .content
+                .iter()
+                .map(|c| c.symbol())
+                .collect::<String>();
+            assert!(!text.contains("? Имя"));
+            assert!(!text.contains("Аватар"));
+            assert_eq!(text.matches('✓').count(), animation.completed());
+            let cells = (6..19)
+                .flat_map(|y| (4..36).map(move |x| (x, y)))
+                .map(|point| {
+                    let cell = &buffer[point];
+                    assert_eq!(cell.symbol(), " ");
+                    cell.bg
+                })
+                .collect::<Vec<_>>();
+            drawings.push(cells);
+        }
+        assert!(drawings[0].iter().all(|c| *c == Color::Rgb(10, 13, 11)));
+        assert!(drawings.windows(2).all(|frames| frames[0] != frames[1]));
+        assert!(animation.finished());
+    }
+}

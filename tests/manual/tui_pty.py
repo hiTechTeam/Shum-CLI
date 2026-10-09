@@ -139,11 +139,11 @@ class Terminal:
 try:
     # First launch offers registration automatically. Cancellation publishes nothing.
     t=Terminal('--no-bluetooth','--relay','ws://127.0.0.1:9','--push-url','off')
-    t.expect('Как вас зовут?');t.exit('\x1b')
+    t.expect('? Имя', 12);t.exit('\x1b')
     assert not cli('profile','list')['profiles']; print('PASS first-run cancellation')
     args=['--no-bluetooth','--relay','ws://127.0.0.1:9','--push-url','off']
     if not NATIVE: args += ['init','--headless']
-    t=Terminal(*args);t.expect('Как вас зовут?');t.send('\r');t.expect('Имя: 1–64')
+    t=Terminal(*args);t.expect('? Имя', 12);t.send('\r');t.expect('Имя: 1–64')
     t.send('Проверка\r');t.expect('другой вариант');t.send('r');t.send('к');t.send('\r');t.expect('Профиль готов',20);t.send('\r')
     if NATIVE: t.expect('Пока нет чатов');t.exit('q')
     else:
@@ -159,7 +159,7 @@ try:
     # Help, invalid arguments, visible command line and command aliases.
     for command in ['/quit','/exit','/q']:
         t=Terminal('-p',aid);t.expect('Пока нет чатов');t.send('/help\r');t.expect('Команды в Shum');t.send('\x1b');t.send('/accept extra extra\r');t.expect('не распознаны');t.send('\x1b');t.exit(command+'\r')
-    t=Terminal('-p',aid);t.expect('Пока нет чатов');t.send('\x10');t.expect('Создать новый профиль');t.send('\x1b[B\x1b[B\r');t.expect('Как вас зовут?');t.send('\x1b');t.expect('Пока нет чатов');t.exit('\x11')
+    t=Terminal('-p',aid);t.expect('Пока нет чатов');t.send('\x10');t.expect('Создать новый профиль');t.send('\x1b[B\x1b[B\r');t.expect('? Имя', 12);t.send('\x1b');t.expect('Пока нет чатов');t.exit('\x11')
     assert len(cli('profile','list')['profiles'])==2;print('PASS profile chooser and cancelled new profile')
     cli('-p',aid,'add',b['invitation'])
     t=Terminal('-p',aid,'ui',b['profile']['ownerId']);t.expect('Сообщение');t.send('qiйшаф123');t.expect('qiйшаф123');t.send('\x1b');t.send('i');t.expect('Мой QR');t.send('\x1b');t.exit('q')

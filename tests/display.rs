@@ -38,21 +38,31 @@ fn warp_direct_placement_contains_the_complete_original_avatar() {
             );
             let (erase, image) = data.split_once("\x1b_Ga=T,").unwrap();
             assert!(erase.contains("\x1b_Ga=d,d=I,"));
-            let (header, payload) = image.split_once(';').unwrap();
+            let (header, _) = image.split_once(';').unwrap();
             assert!(header.contains("c=18,r=9,C=1,q=2"));
-            let png = STANDARD
-                .decode(payload.split_once("\x1b\\").unwrap().0)
-                .unwrap();
+            let encoded = data
+                .split("\x1b_G")
+                .filter(|chunk| chunk.starts_with("a=T,") || chunk.starts_with("m="))
+                .map(|chunk| {
+                    let (header, payload) = chunk.split_once(';').unwrap();
+                    let payload = payload.split_once("\x1b\\").unwrap().0;
+                    assert!(payload.len() <= 4096);
+                    assert!(header.contains("m="));
+                    payload
+                })
+                .collect::<String>();
+            let png = STANDARD.decode(encoded).unwrap();
             let pixels = image::load_from_memory(&png).unwrap().to_rgba8();
-            assert_eq!(pixels.dimensions(), (36, 36));
-            assert_eq!(
-                pixels.into_raw(),
-                shum_cli::avatar::render_subject(42)
-                    .pixels
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-            );
+            let scale = shum_cli::avatar::PNG_SCALE;
+            assert_eq!(pixels.dimensions(), (36 * scale, 36 * scale));
+            let original = shum_cli::avatar::render_subject(42);
+            for (x, y, pixel) in pixels.enumerate_pixels() {
+                assert_eq!(
+                    pixel.0,
+                    original.pixels[((y / scale) * 36 + x / scale) as usize],
+                    "no smoothing or missing details at {x},{y}"
+                );
+            }
         })
         .unwrap();
     // The transparent PNG must reveal the panel, not untouched shell cells.
