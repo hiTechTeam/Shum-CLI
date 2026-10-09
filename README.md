@@ -102,7 +102,7 @@ cargo fmt --all -- --check
 
 CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Linux and Windows packages are pending.
 
-The 0.1.6 release passed 31 CLI tests and Rosetta messaging checks. Homebrew upgrade, automatic service replacement and messages in both directions with an iPhone were verified. Bluetooth permission was requested again during the transition from ad hoc to certificate signing; the next certificate-to-certificate upgrade remains to be checked.
+Version 0.1.7 passed 39 CLI tests, signed-package checks, PTY rendering checks and a Rosetta profile/removal scenario. The 0.1.6 to 0.1.7 service upgrade was verified on a disposable profile. Bluetooth permission persistence and iPhone delivery after this update still need real-device verification.
 
 [Release verification](docs/release-verification-0.1.7.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
