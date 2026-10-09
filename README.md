@@ -36,15 +36,16 @@ The script checks SHA-256 and the app signature, installs in `~/.local/share/shu
 shum chats
 shum profile
 shum qr
+shum contacts
 shum add 'shum://c4/<signed-profile>'
 shum add --image ~/Desktop/invite.png
-shum invite <contact-id>
-shum open <contact-id>
-shum send <contact-id> "Hello"
+shum invite 'CONTACT_ID'
+shum open 'CONTACT_ID'
+shum send 'CONTACT_ID' "Hello"
 shum status
 ```
 
-Contact commands use Shum IDs, unique prefixes of at least eight characters, or full Nostr public keys. Names are for display. Full cards and QR images can be added offline; fetching a new card by network ID requires the peer to respond.
+Replace CONTACT_ID with an ID from `shum contacts`. Contact commands use Shum IDs, unique prefixes of at least eight characters, or full Nostr public keys. Names are for display. Full cards and QR images can be added offline; fetching a new card by network ID requires the peer to respond.
 
 In an open chat, `/invite` invites that peer. `/qr` shows your own card. Use `/help` for commands; Ctrl+Q exits the interface. Unread counts and typing indicators appear in the chat list. Terminal uses cell colors for avatars; Warp uses PNG.
 

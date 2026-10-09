@@ -36,15 +36,16 @@ curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh
 shum chats
 shum profile
 shum qr
+shum contacts
 shum add 'shum://c4/<signed-profile>'
 shum add --image ~/Desktop/invite.png
-shum invite <contact-id>
-shum open <contact-id>
-shum send <contact-id> "Привет"
+shum invite 'CONTACT_ID'
+shum open 'CONTACT_ID'
+shum send 'CONTACT_ID' "Привет"
 shum status
 ```
 
-Команды контактов принимают Shum ID, уникальный префикс от восьми символов или полный публичный Nostr-ключ. Имена служат для отображения. Полные карточки и QR добавляются офлайн; получение новой карточки по сетевому ID требует ответа собеседника.
+Замените CONTACT_ID на ID из `shum contacts`. Команды контактов принимают Shum ID, уникальный префикс от восьми символов или полный публичный Nostr-ключ. Имена служат для отображения. Полные карточки и QR добавляются офлайн; получение новой карточки по сетевому ID требует ответа собеседника.
 
 В открытом чате `/invite` приглашает его собеседника. `/qr` показывает вашу карточку. `/help` открывает справку, Ctrl+Q закрывает интерфейс. В списке чатов видны непрочитанные сообщения и набор текста. Terminal рисует аватары цветом ячеек, Warp использует PNG.
 
