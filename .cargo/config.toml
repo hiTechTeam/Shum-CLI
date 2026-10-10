@@ -1,2 +1,7 @@
 [net]
 git-fetch-with-cli = true
+
+# Windows builds carry the C runtime inside shum.exe, so it starts on a clean
+# system without the Visual C++ Redistributable.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -72,6 +72,16 @@ In a chat, `/language en` changes and saves the language immediately. `/language
 
 Priority: `--lang`, `SHUM_LANG`, saved setting, system locale. The system locale uses `LC_ALL`, then `LC_MESSAGES`, then `LANG`; if none are set, macOS preferred languages are used. Unsupported locales and `C`/`POSIX` use English. Chinese locales map to Simplified Chinese; Portuguese locales use Brazilian Portuguese. Settings are stored in `cli-settings.json` in the data directory, without creating a profile. Commands, IDs, JSON field names and your messages stay unchanged. System and dependency diagnostics may remain in their original language. Arabic text shaping depends on the terminal; the interface keeps its column order.
 
+### Windows (experimental preview)
+
+Windows 10 and 11, x64 and ARM64. In PowerShell, install or update with:
+
+```powershell
+irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1 | iex
+```
+
+The script picks the build for your processor, checks SHA-256, installs `shum.exe` in `%LOCALAPPDATA%\Programs\Shum` and adds it to your user PATH. Builds are cross-compiled on macOS (`scripts/package_windows.sh`) and are not code-signed. They have not been run on Windows hardware yet. Bluetooth only discovers nearby devices so far; other devices cannot find a Windows computer, and computers without Bluetooth chat over the internet.
+
 ## Uninstall
 
 For Homebrew:
@@ -85,6 +95,12 @@ For the script installation:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh | sh -s -- --uninstall
+```
+
+For Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1))) -Uninstall
 ```
 
 Profile data stays in `~/Library/Application Support/org.Shum.Shum` or your `--data-dir`; profile keys may be in Keychain.

@@ -72,6 +72,16 @@ shum language           # показать текущий язык и досту
 
 Приоритет: `--lang`, `SHUM_LANG`, сохранённая настройка, язык системы. Системный язык определяется по `LC_ALL`, затем `LC_MESSAGES`, затем `LANG`; если они не заданы, используются предпочитаемые языки macOS. Для неподдерживаемого языка и `C`/`POSIX` выбирается английский. Китайские локали используют упрощённый китайский, португальские локали используют вариант Бразилии. Настройка хранится в `cli-settings.json` в каталоге данных, профиль для неё не создаётся. Команды, ID, поля JSON и сообщения не переводятся. Диагностика системы и зависимостей может оставаться на исходном языке. Отрисовка арабского письма зависит от терминала; порядок колонок интерфейса сохраняется.
 
+### Windows (экспериментальное превью)
+
+Windows 10 и 11, x64 и ARM64. Установка и обновление в PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1 | iex
+```
+
+Скрипт выбирает сборку под процессор, проверяет SHA-256, ставит `shum.exe` в `%LOCALAPPDATA%\Programs\Shum` и добавляет каталог в PATH пользователя. Сборки делаются на macOS кросс-компиляцией (`scripts/package_windows.sh`) и не подписаны. На настоящем Windows они ещё не запускались. Bluetooth пока только находит устройства рядом: другие устройства компьютер с Windows не видят, а без Bluetooth переписка идёт через интернет.
+
 ## Удаление
 
 Для Homebrew:
@@ -85,6 +95,12 @@ brew uninstall shum
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh | sh -s -- --uninstall
+```
+
+Для Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1))) -Uninstall
 ```
 
 Данные остаются в `~/Library/Application Support/org.Shum.Shum` или вашем `--data-dir`; ключи могут храниться в Keychain.

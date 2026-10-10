@@ -273,6 +273,8 @@ type ServiceDiscovery = (ServiceRoots, ServiceProfiles, Vec<Agent>);
 
 fn service_profiles(root: &Path, all_registered: bool) -> Result<ServiceDiscovery> {
     let root = root.canonicalize().unwrap_or_else(|_| root.into());
+    // Only macOS discovers other registered agents and adds their roots.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut roots = std::collections::BTreeSet::from([root.clone()]);
     #[cfg(target_os = "macos")]
     let agents = {
