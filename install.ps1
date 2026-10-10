@@ -63,10 +63,12 @@ try {
         return
     }
 
-    # Pick the newest published release that carries a Windows build.
+    # Pick the newest published release that carries a Windows build. GitHub
+    # does not list releases by date, so sort them here.
     $releases = Invoke-RestMethod -UseBasicParsing -Headers @{ 'User-Agent' = 'shum-install' } `
-        -Uri "https://api.github.com/repos/$repository/releases?per_page=30"
-    $release = $releases | Where-Object { -not $_.draft -and ($_.assets.name -contains $asset) } | Select-Object -First 1
+        -Uri "https://api.github.com/repos/$repository/releases?per_page=100"
+    $release = $releases | Where-Object { -not $_.draft -and ($_.assets.name -contains $asset) } |
+        Sort-Object { [datetime]$_.published_at } -Descending | Select-Object -First 1
     if (-not $release) { Fail "Сборка $asset не найдена. Информация: $projectUrl" }
     $base = "https://github.com/$repository/releases/download/$($release.tag_name)"
 
