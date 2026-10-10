@@ -1,3 +1,6 @@
+mod reaction_art;
+mod reactions;
+
 use crate::{
     display::{ACCENT as GREEN, LOGO, LOGO_COLOR, MUTED},
     ipc,
@@ -43,6 +46,7 @@ pub struct View {
     pub profiles: Option<Vec<shum_store::profiles::Profile>>,
     pub profile_selected: usize,
     form: Option<Form>,
+    reactions: Option<reactions::Picker>,
     chat_rows: Vec<(Rect, String)>,
 }
 impl View {
@@ -298,7 +302,8 @@ pub fn draw(
         || view.qr.is_some()
         || view.info.is_some()
         || view.profiles.is_some()
-        || view.form.is_some();
+        || view.form.is_some()
+        || view.reactions.is_some();
     draw_content(frame, snapshot, view, pictures, ascii);
     pictures.hide_direct = false;
     pictures.colors.apply(frame.buffer_mut(), ascii);
@@ -779,6 +784,13 @@ fn draw_content(
         }
     }
     if let Some(profiles) = &view.profiles {
+        // Hide chat graphics behind the modal, but allow the modal's own PNGs.
+        let hidden_behind_modal = pictures.hide_direct;
+        pictures.hide_direct = view.help
+            || view.info.is_some()
+            || view.qr.is_some()
+            || view.form.is_some()
+            || view.reactions.is_some();
         let row_height = 3;
         let stride = row_height + 1;
         let popup = centered(
@@ -865,6 +877,7 @@ fn draw_content(
                 }
             }
         }
+        pictures.hide_direct = hidden_behind_modal;
         frame.render_widget(
             Paragraph::new("Enter выбрать · d удалить · Esc закрыть")
                 .style(Style::default().fg(muted)),
@@ -926,6 +939,7 @@ fn draw_content(
             }
         }
     }
+    reactions::draw(frame, snapshot, view, ascii);
     if let Some(form) = &view.form {
         let title = match form {
             Form::DeleteProfile { .. } => "Введите имя удаляемого профиля",
@@ -1019,6 +1033,9 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
     }
     if is_quit_key(key) {
         return Ok(Action::Quit);
+    }
+    if view.reactions.is_some() {
+        return reactions::handle(view, snapshot, key);
     }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return Ok(match shortcut(key.code) {
@@ -1124,6 +1141,10 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
         KeyCode::PageUp => view.scroll = view.scroll.saturating_add(10),
         KeyCode::PageDown => view.scroll = view.scroll.saturating_sub(10),
         KeyCode::Enter if editing && !view.input.is_empty() => {
+            if view.input.trim() == "/react" {
+                reactions::open(view, snapshot)?;
+                return Ok(Action::None);
+            }
             return parse_command(&view.input, view.opened.as_deref(), snapshot);
         }
         KeyCode::Enter => {
@@ -1445,11 +1466,28 @@ async fn run_loop(
                     view.info.is_some(),
                     view.profiles.is_some(),
                     view.form.is_some(),
+                    view.reactions.is_some(),
                 ),
                 contacts(snapshot, view.tab)
                     .iter()
                     .map(|c| (text(&c["id"]), c["card"]["avatarSeed"].as_u64()))
                     .collect::<Vec<_>>(),
+                (
+                    view.profile_selected,
+                    view.profiles.as_ref().map(|profiles| {
+                        profiles
+                            .iter()
+                            .map(|p| {
+                                (
+                                    p.id.as_str(),
+                                    view.profile_details
+                                        .get(&p.id)
+                                        .and_then(|d| d["card"]["avatarSeed"].as_u64()),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    }),
+                ),
             ),
         )?;
         terminal.draw(|f| draw(f, snapshot, view, pictures, ascii))?;
@@ -1457,7 +1495,9 @@ async fn run_loop(
             match event::read()? {
                 Event::Key(key) => handle_key(view, snapshot, key),
                 Event::Paste(value) => {
-                    if view.composing || view.command_mode || view.form.is_some() {
+                    if view.reactions.is_none()
+                        && (view.composing || view.command_mode || view.form.is_some())
+                    {
                         let limit = if view.form.is_some() { 128 } else { 4096 };
                         for c in safe(&value).chars() {
                             if view.input.len() + c.len_utf8() > limit {
@@ -1469,7 +1509,8 @@ async fn run_loop(
                     Ok(Action::None)
                 }
                 Event::Mouse(mouse) => {
-                    if view.profiles.is_none()
+                    if view.reactions.is_none()
+                        && view.profiles.is_none()
                         && view.form.is_none()
                         && view.qr.is_none()
                         && !view.help
@@ -1656,6 +1697,7 @@ q          выход из списка  Ctrl+C / Ctrl+Q / F10 из любого
 /accept [ID]              /decline [ID]
 /open <ID>                /send <ID> \"текст\"
 /read [ID]                /clear [ID] с подтверждением
+/react                     выбрать сообщение и пиксельную реакцию
 /react <ID> heart|like|dislike|laugh|fire|coffin|hundred|horror
 /cancel <ID>               /block <ID> [--undo]
 /profile                   /profile list
@@ -1746,6 +1788,6 @@ pub fn bluetooth_status(snapshot: &Value) -> String {
 pub fn nearby_label(contact: &Value) -> String {
     match contact["distance"].as_u64() {
         Some(meters) => format!("Рядом · ~{meters} м"),
-        None => "Рядом · Bluetooth".into(),
+        None => "Рядом · расстояние неизвестно".into(),
     }
 }

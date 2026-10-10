@@ -1,3 +1,41 @@
+# Shum CLI 0.1.7, package revision 1 · 10 October 2026
+
+English · Русский below
+
+* `/react` opens message selection with arrow keys, then a pixel reaction picker.
+  Enter confirms; Esc goes back or cancels. Selecting your current reaction removes it.
+* Profile avatars appear in the Warp Ctrl+P window.
+* Nearby peers without a signal estimate show that distance is unknown.
+* App version remains 0.1.7. Homebrew package version is 0.1.7_1.
+  Release assets are published under `v0.1.7-r1`; the original archive is preserved.
+
+Update with `brew update`, then `brew upgrade shum`. Script installations use
+`install.sh` again. The next CLI command replaces an outdated service by its
+binary hash while preserving profiles and the outgoing queue. Reopen the chat
+interface to use the new controls.
+
+macOS 15+, Apple Silicon and Intel. The app uses the same self-signed certificate.
+It is not notarized; the pkg container is unsigned. A real Intel Mac was not tested.
+
+## Русский
+
+* `/react` открывает выбор сообщения стрелками, затем меню пиксельных реакций.
+  Enter подтверждает, Esc возвращает назад или отменяет. Повторный выбор снимает реакцию.
+* В окне Ctrl+P в Warp снова отображаются аватары профилей.
+* Если нет оценки сигнала, рядом с собеседником написано «расстояние неизвестно».
+* Версия приложения остаётся 0.1.7. Ревизия пакета Homebrew: 0.1.7_1.
+  Артефакты опубликованы под `v0.1.7-r1`, исходный архив сохранён.
+
+Обновление: `brew update`, затем `brew upgrade shum`. При установке скриптом
+повторите `install.sh`. Следующая команда CLI заменит устаревшую службу по хэшу
+бинарника, сохраняя профили и очередь отправки. Чтобы увидеть новые элементы
+интерфейса, откройте чаты заново.
+
+macOS 15+, Apple Silicon и Intel. Сертификат подписи прежний, самоподписанный.
+Нотарификации нет, контейнер pkg не подписан. На настоящем Intel Mac не проверялось.
+
+---
+
 # Shum CLI 0.1.7 · 10 октября 2026
 
 * Регистрация: анимация сборки ключа и щита, плавная шкала и галочки после

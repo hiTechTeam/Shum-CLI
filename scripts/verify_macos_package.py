@@ -75,6 +75,9 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
         assert hashlib.sha256(bundle.extractfile("Shum.app/Contents/MacOS/shum").read()).hexdigest() == manifest["binarySha256"]
     formula = (package.parent / "homebrew-shum/Formula/shum.rb").read_text()
     assert hashlib.sha256(archive.read_bytes()).hexdigest() in formula
+    revision = manifest.get("packageRevision", 0)
+    assert isinstance(revision, int) and revision >= 0
+    assert (f"  revision {revision}\n" in formula) if revision else "  revision " not in formula
     assert "depends_on arch:" not in formula
     assert 'app = buildpath unless app.directory?' in formula
     assert '(prefix/"Shum.app").install app/"Contents"' in formula

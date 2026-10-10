@@ -49,6 +49,8 @@ Replace CONTACT_ID with an ID from `shum contacts`. Contact commands use Shum ID
 
 In an open chat, `/invite` invites that peer. `/qr` shows your own card. Use `/help` for commands; Ctrl+Q exits the interface. Unread counts and typing indicators appear in the chat list. Terminal uses cell colors for avatars; Warp uses PNG.
 
+In an open chat, type `/react` and press Enter. Select a message with ↑/↓, press Enter, then choose a pixel reaction with the arrows and confirm with Enter. Esc goes back or cancels. Selecting your current reaction removes it. The menu uses the same eight pixel icons as iOS.
+
 The service keeps running after the interface closes. `shum daemon --stop` stops it; `shum daemon --install` enables login startup. After an update, the next CLI command replaces an outdated service and preserves the outgoing queue. Allow Bluetooth access for Shum when macOS asks.
 
 For local profiles, use the full ID from `shum profile list`: `shum profile use 'PROFILE_ID'`, `shum -p 'PROFILE_ID' chats`, or `shum profile delete 'PROFILE_ID'`. The deletion prompt shows the name and ID; the name confirms the operation and never selects its target.

@@ -188,7 +188,10 @@ def main():
     parser.add_argument("--development-adhoc", action="store_true", help="Только локальная проверка, непригодна для выпуска")
     parser.add_argument("--sign-installer", help="Имя сертификата Developer ID Installer")
     parser.add_argument("--release-base-url", help="HTTPS-каталог опубликованных артефактов")
+    parser.add_argument("--revision", type=int, default=0, help="Ревизия пакета Homebrew без изменения версии приложения")
     args = parser.parse_args()
+    if args.revision < 0:
+        parser.error("Ревизия пакета не может быть отрицательной")
     if platform.system() != "Darwin":
         parser.error("Установщик macOS собирается на macOS")
     if args.development_adhoc and args.release_base_url:
@@ -286,7 +289,7 @@ def main():
         run(*command, str(package))
     digest = hashlib.sha256(package.read_bytes()).hexdigest()
     package.with_suffix(".pkg.sha256").write_text(f"{digest}  {package.name}\n")
-    manifest = {"version": version, "architecture": architecture, "architectures": sorted(minima),
+    manifest = {"version": version, "packageRevision": args.revision, "architecture": architecture, "architectures": sorted(minima),
                 "minimumMacOSByArchitecture": minima, "minimumMacOS": minimum, "archive": archive.name,
                 "package": package.name, "sha256": digest,
                 "binarySha256": binary_digest,
@@ -304,6 +307,7 @@ def main():
     tap = output / "homebrew-shum"
     formula = tap / "Formula/shum.rb"
     formula.parent.mkdir(parents=True, exist_ok=True)
+    revision_line = f"  revision {args.revision}\n" if args.revision else ""
     formula.write_text(f'''class Shum < Formula
   desc "Private messenger in your terminal"
   homepage "https://github.com/hiTechTeam/Shum-CLI"
@@ -311,7 +315,7 @@ def main():
   version "{version}"
   sha256 "{archive_digest}"
   license "MIT"
-
+{revision_line}
   depends_on macos: :{macos_name}
 
   def install
