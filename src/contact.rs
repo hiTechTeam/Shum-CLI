@@ -1,4 +1,5 @@
 //! Contact addressing uses identifiers; display names never select a recipient.
+use crate::i18n::t;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
 
@@ -8,7 +9,7 @@ pub fn validate(selector: &str) -> Result<()> {
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     {
-        bail!("Укажите Shum ID (полный или уникальный префикс от 8 символов) либо полный сетевой ID. Имя не является адресом контакта.");
+        bail!("{}", t("Укажите Shum ID (полный или уникальный префикс от 8 символов) либо полный сетевой ID. Имя не является адресом контакта."));
     }
     Ok(())
 }
@@ -41,6 +42,9 @@ pub fn resolve<'a>(
     match matches.len() {
         0 => Ok(None),
         1 => Ok(matches.into_iter().next().map(str::to_owned)),
-        _ => bail!("ID соответствует нескольким контактам. Укажите полный Shum ID."),
+        _ => bail!(
+            "{}",
+            t("ID соответствует нескольким контактам. Укажите полный Shum ID.")
+        ),
     }
 }

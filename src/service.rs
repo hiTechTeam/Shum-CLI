@@ -1,18 +1,25 @@
+use crate::i18n::t;
 use anyhow::{bail, Context, Result};
 use std::{path::Path, process::Command};
 fn run(command: &mut Command) -> Result<()> {
     let result = command.output()?;
     if !result.status.success() {
         bail!(
-            "Системная служба: {}",
-            crate::terminal::safe(&String::from_utf8_lossy(&result.stderr))
+            "{}",
+            crate::i18n::format(
+                "Системная служба: {}",
+                &[(
+                    "0",
+                    crate::terminal::safe(&String::from_utf8_lossy(&result.stderr)).to_string()
+                )]
+            )
         );
     }
     Ok(())
 }
 pub fn install(root: &Path, id: &str) -> Result<()> {
     if !profile_id(id) {
-        bail!("Недействительный ID профиля");
+        bail!("{}", t("Недействительный ID профиля"));
     }
     let root = root.canonicalize()?;
     let root = root.as_path();
@@ -73,7 +80,7 @@ pub fn install(root: &Path, id: &str) -> Result<()> {
             )
         }
         let config = directories::BaseDirs::new()
-            .context("Нет каталога конфигурации")?
+            .context(t("Нет каталога конфигурации"))?
             .config_dir()
             .join("systemd/user");
         std::fs::create_dir_all(&config)?;
@@ -104,7 +111,7 @@ pub fn install(root: &Path, id: &str) -> Result<()> {
         run(Command::new("schtasks").args(["/Run", "/TN", &format!("Shum-{id}")]))?;
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    bail!("Автозапуск на этой системе не поддерживается");
+    bail!("{}", t("Автозапуск на этой системе не поддерживается"));
     Ok(())
 }
 
@@ -121,7 +128,7 @@ pub async fn control_lock(root: &Path) -> Result<std::fs::File> {
     let path = root.join("service-control.lock");
     if let Ok(meta) = std::fs::symlink_metadata(&path) {
         if !meta.is_file() || meta.file_type().is_symlink() {
-            bail!("Недействительный файл блокировки служб");
+            bail!("{}", t("Недействительный файл блокировки служб"));
         }
     }
     let file = options.open(path)?;
@@ -134,7 +141,10 @@ pub async fn control_lock(root: &Path) -> Result<std::fs::File> {
             Err(error) => return Err(error.into()),
         }
     }
-    bail!("Другая команда управления службами не завершилась за 90 секунд")
+    bail!(
+        "{}",
+        t("Другая команда управления службами не завершилась за 90 секунд")
+    )
 }
 
 fn profile_id(id: &str) -> bool {
@@ -147,7 +157,7 @@ fn profile_id(id: &str) -> bool {
 #[cfg(target_os = "macos")]
 fn agent_directory() -> Result<std::path::PathBuf> {
     Ok(directories::BaseDirs::new()
-        .context("Домашний каталог недоступен")?
+        .context(t("Домашний каталог недоступен"))?
         .home_dir()
         .join("Library/LaunchAgents"))
 }
@@ -163,23 +173,37 @@ struct Agent {
 fn read_agent(file: &Path) -> Result<Agent> {
     let meta = std::fs::symlink_metadata(file)?;
     if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 1024 * 1024 {
-        bail!("Недействительный LaunchAgent: {}", file.display());
+        bail!(
+            "{}",
+            crate::i18n::format(
+                "Недействительный LaunchAgent: {}",
+                &[("0", format!("{}", file.display()))]
+            )
+        );
     }
     let result = Command::new("/usr/bin/plutil")
         .args(["-convert", "json", "-o", "-"])
         .arg(file)
         .output()?;
     if !result.status.success() {
-        bail!("Не удалось прочитать LaunchAgent: {}", file.display());
+        bail!(
+            "{}",
+            crate::i18n::format(
+                "Не удалось прочитать LaunchAgent: {}",
+                &[("0", format!("{}", file.display()))]
+            )
+        );
     }
     let value: serde_json::Value = serde_json::from_slice(&result.stdout)?;
-    let label = value["Label"].as_str().context("LaunchAgent без Label")?;
+    let label = value["Label"]
+        .as_str()
+        .context(t("LaunchAgent без Label"))?;
     let id = label
         .strip_prefix("org.shum.cli.")
         .filter(|id| profile_id(id))
-        .context("Недействительный Label Shum")?;
+        .context(t("Недействительный Label Shum"))?;
     if file.file_name().and_then(|n| n.to_str()) != Some(&format!("{label}.plist")) {
-        bail!("Имя LaunchAgent не соответствует Label");
+        bail!("{}", t("Имя LaunchAgent не соответствует Label"));
     }
     let args: Vec<String> = serde_json::from_value(value["ProgramArguments"].clone())?;
     if args.len() != 7
@@ -189,11 +213,17 @@ fn read_agent(file: &Path) -> Result<Agent> {
         || args[5] != "daemon"
         || args[6] != "--run"
     {
-        bail!("Неизвестные аргументы LaunchAgent: {}", file.display());
+        bail!(
+            "{}",
+            crate::i18n::format(
+                "Неизвестные аргументы LaunchAgent: {}",
+                &[("0", format!("{}", file.display()))]
+            )
+        );
     }
     let root = std::path::PathBuf::from(&args[2]);
     if !root.is_absolute() {
-        bail!("Каталог данных LaunchAgent должен быть абсолютным");
+        bail!("{}", t("Каталог данных LaunchAgent должен быть абсолютным"));
     }
     Ok(Agent {
         file: file.into(),
@@ -210,7 +240,10 @@ pub(crate) fn is_installed(root: &Path, id: &str) -> Result<bool> {
     }
     let agent = read_agent(&file)?;
     if agent.root != root.canonicalize()? {
-        bail!("LaunchAgent этого профиля использует другой каталог данных");
+        bail!(
+            "{}",
+            t("LaunchAgent этого профиля использует другой каталог данных")
+        );
     }
     Ok(true)
 }
@@ -343,8 +376,11 @@ async fn uninstall_inner(
             for (_, id) in profiles.iter().filter(|(path, _)| path == root) {
                 if !registered.iter().any(|profile| &profile.id == id) {
                     bail!(
-                        "Профиль {id} отсутствует в реестре {}; полное удаление отменено",
-                        root.display()
+                        "{}",
+                        crate::i18n::format(
+                            "Профиль {id} отсутствует в реестре {}; полное удаление отменено",
+                            &[("id", id.to_string()), ("0", format!("{}", root.display()))]
+                        )
                     );
                 }
             }
@@ -372,7 +408,7 @@ async fn uninstall_inner(
     #[cfg(target_os = "linux")]
     for (_, id) in &profiles {
         let config = directories::BaseDirs::new()
-            .context("Нет каталога конфигурации")?
+            .context(t("Нет каталога конфигурации"))?
             .config_dir()
             .join(format!("systemd/user/shum-{id}.service"));
         if config.exists() {
@@ -407,9 +443,9 @@ async fn uninstall_inner(
         for (_, registry, registered) in registries {
             for profile in registered {
                 registry.delete(&profile.id).with_context(|| {
-                    format!(
+                    crate::i18n::format(
                         "Не удалось удалить профиль {}; оставшиеся данные сохранены",
-                        profile.id
+                        &[("0", profile.id.to_string())],
                     )
                 })?;
                 deleted += 1;
@@ -421,13 +457,24 @@ async fn uninstall_inner(
             if !root.exists() {
                 continue;
             }
-            for name in ["profiles.json", "profiles.lock", "service-control.lock"] {
+            for name in [
+                "profiles.json",
+                "profiles.lock",
+                "service-control.lock",
+                "cli-settings.json",
+            ] {
                 let path = root.join(name);
                 match std::fs::symlink_metadata(&path) {
                     Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
                         std::fs::remove_file(path)?;
                     }
-                    Ok(_) => bail!("Недействительный файл реестра: {}", path.display()),
+                    Ok(_) => bail!(
+                        "{}",
+                        crate::i18n::format(
+                            "Недействительный файл реестра: {}",
+                            &[("0", format!("{}", path.display()))]
+                        )
+                    ),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                     Err(error) => return Err(error.into()),
                 }
@@ -440,8 +487,11 @@ async fn uninstall_inner(
         }
         if !remaining.is_empty() {
             bail!(
-                "Профили удалены, но посторонние файлы сохранены в: {}",
-                remaining.join(", ")
+                "{}",
+                crate::i18n::format(
+                    "Профили удалены, но посторонние файлы сохранены в: {}",
+                    &[("0", remaining.join(", ").to_string())]
+                )
             );
         }
         return Ok(
@@ -460,7 +510,7 @@ fn remove_caches(root: &Path) -> Result<usize> {
     }
     let meta = std::fs::symlink_metadata(&cache)?;
     if !meta.is_dir() || meta.file_type().is_symlink() {
-        bail!("Недействительный каталог кэша служб");
+        bail!("{}", t("Недействительный каталог кэша служб"));
     }
     let mut removed = 0;
     for entry in std::fs::read_dir(&cache)? {

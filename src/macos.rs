@@ -1,5 +1,6 @@
 //! Launch the daemon as a macOS application, so Bluetooth permission belongs
 //! to Shum instead of a terminal which may lack a Bluetooth purpose string.
+use crate::i18n::t;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
@@ -51,11 +52,17 @@ pub(crate) fn prepare(root: &Path) -> Result<PathBuf> {
         .args(["--force", "--sign", "-", "--identifier", "org.shum.cli"])
         .arg(&bundle)
         .output()
-        .context("Не удалось подписать локальную службу Shum")?;
+        .context(t("Не удалось подписать локальную службу Shum"))?;
     if !signed.status.success() {
         bail!(
-            "Подпись службы Shum: {}",
-            crate::terminal::safe(&String::from_utf8_lossy(&signed.stderr))
+            "{}",
+            crate::i18n::format(
+                "Подпись службы Shum: {}",
+                &[(
+                    "0",
+                    crate::terminal::safe(&String::from_utf8_lossy(&signed.stderr)).to_string()
+                )]
+            )
         );
     }
     match fs::rename(staging.path(), &version) {
@@ -82,11 +89,17 @@ pub(crate) fn launch(root: &Path, id: &str) -> Result<()> {
         .arg(&root)
         .args(["--profile", id, "daemon", "--run"])
         .output()
-        .context("Не удалось открыть службу Shum через macOS")?;
+        .context(t("Не удалось открыть службу Shum через macOS"))?;
     if !result.status.success() {
         bail!(
-            "Запуск службы Shum: {}",
-            crate::terminal::safe(&String::from_utf8_lossy(&result.stderr))
+            "{}",
+            crate::i18n::format(
+                "Запуск службы Shum: {}",
+                &[(
+                    "0",
+                    crate::terminal::safe(&String::from_utf8_lossy(&result.stderr)).to_string()
+                )]
+            )
         );
     }
     Ok(())
@@ -114,7 +127,7 @@ fn installed_bundle(executable: &Path) -> Result<Option<PathBuf>> {
     verify(app)?;
     let stable = stable_bundle(app);
     if stable != app && stable.canonicalize().ok().as_deref() != Some(app) {
-        bail!("Стабильная ссылка установки не указывает на запущенный Shum.app. Запустите актуальную команду shum.");
+        bail!("{}", t("Стабильная ссылка установки не указывает на запущенный Shum.app. Запустите актуальную команду shum."));
     }
     Ok(Some(stable))
 }
@@ -157,8 +170,14 @@ fn verify(app: &Path) -> Result<()> {
         .output()?;
     if !verified.status.success() {
         bail!(
-            "Подпись установленного Shum.app недействительна: {}",
-            crate::terminal::safe(&String::from_utf8_lossy(&verified.stderr))
+            "{}",
+            crate::i18n::format(
+                "Подпись установленного Shum.app недействительна: {}",
+                &[(
+                    "0",
+                    crate::terminal::safe(&String::from_utf8_lossy(&verified.stderr)).to_string()
+                )]
+            )
         );
     }
     Ok(())

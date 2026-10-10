@@ -1,3 +1,70 @@
+# Shum CLI 0.1.8 · 10 October 2026
+
+* Ten interface languages: English, Russian, Spanish, Simplified Chinese, Hindi,
+  French, Japanese, Brazilian Portuguese, Arabic and Korean. System language is
+  detected automatically; the chosen language is saved locally.
+* `/language` and Ctrl+L open a language menu. Use arrows and Enter, or set a
+  language directly with `/language en` or `shum language en`.
+* Ctrl+R opens the message and pixel reaction picker, alongside `/react`.
+  Cancelling or applying a reaction preserves the message draft.
+* Avatars and reaction icons stay visible outside reaction and language menus.
+  Reaction PNGs in Warp are smaller.
+* Invitation requests, acceptance and decline appear in the chat history and
+  survive restarts. The recipient uses `/accept` or `/decline` and can still
+  accept after declining. Declined incoming invitations remain in the invitations tab.
+* New invitation events are saved with the encrypted profile state. Protocol
+  formats and the pinned Core dependency are unchanged.
+
+Update with `brew update`, then `brew upgrade shum`. Reopen the chat interface
+for the new controls. The next CLI command updates the service automatically,
+preserving profiles, history and the outgoing queue. Script installations update
+by running `install.sh` again.
+
+macOS 15+, Apple Silicon and Intel. The app uses the existing self-signed
+certificate and is not notarized; the pkg container is unsigned. Actual Intel
+hardware, clean-account Gatekeeper and Bluetooth permission persistence after
+this release have not been verified.
+
+Uninstall: `shum daemon --uninstall`, then `brew uninstall shum`. Profiles,
+keys and messages are preserved. Data lives in
+`~/Library/Application Support/org.Shum.Shum` or your `--data-dir`.
+To erase profiles and their keys too, run `shum daemon --uninstall --purge`
+and confirm `DELETE` before removing the package.
+
+## Русский
+
+* Десять языков интерфейса: русский, английский, испанский, упрощённый китайский,
+  хинди, французский, японский, бразильский португальский, арабский и корейский.
+  Язык системы определяется автоматически, выбранный язык сохраняется.
+* `/language` и Ctrl+L открывают меню языка. Выбор стрелками и Enter.
+  Также работают `/language en` и `shum language en`.
+* Ctrl+R открывает выбор сообщения и пиксельной реакции, как `/react`.
+  Черновик сохраняется после выбора или отмены реакции.
+* Аватары и реакции остаются видимыми вне окон выбора реакции и языка.
+  PNG-реакции в Warp стали компактнее.
+* Отправка приглашения, принятие и отказ видны в переписке и сохраняются после
+  перезапуска. Получатель выбирает `/accept` или `/decline` и может принять
+  приглашение после отказа. Отклонённый входящий запрос остаётся во вкладке приглашений.
+* Новые события приглашений сохраняются вместе с зашифрованным состоянием
+  профиля. Форматы протокола и закреплённая версия ядра не изменены.
+
+Обновление: `brew update`, затем `brew upgrade shum`. Откройте интерфейс чатов
+заново. Служба обновится автоматически при следующей команде CLI, сохраняя
+профили, историю и очередь отправки. Для установки скриптом повторите `install.sh`.
+
+macOS 15+, Apple Silicon и Intel. Приложение подписано прежним самоподписанным
+сертификатом, нотарификации нет; контейнер pkg не подписан. Настоящий Intel Mac,
+Gatekeeper на чистой учётной записи и сохранение разрешения Bluetooth после
+этого выпуска не проверены.
+
+Удаление: `shum daemon --uninstall`, затем `brew uninstall shum`. Профили,
+ключи и переписка сохраняются. Данные находятся в
+`~/Library/Application Support/org.Shum.Shum` или вашем `--data-dir`.
+Для стирания профилей вместе с ключами выполните
+`shum daemon --uninstall --purge`, подтвердите `DELETE`, затем удалите пакет.
+
+---
+
 # Shum CLI 0.1.7, package revision 2 · 10 October 2026
 
 * Chat history shows pixel reaction icons with their authors' names.

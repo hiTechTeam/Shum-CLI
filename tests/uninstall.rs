@@ -30,7 +30,9 @@ fn purge_requires_explicit_confirmation_and_is_repeatable() {
         assert_eq!(std::fs::read(&keys).unwrap(), original);
         assert_eq!(profiles.list().unwrap().1.len(), 2);
     }
+    assert!(cli(&root, &["language", "en"]).status.success());
     assert!(cli(&root, &["daemon", "--uninstall"]).status.success());
+    assert!(root.join("cli-settings.json").is_file());
     assert_eq!(std::fs::read(&keys).unwrap(), original);
     assert!(root.join(&two.id).join("messages.sqlite").exists());
     let cache = root.join("services/Shum.app/Contents");

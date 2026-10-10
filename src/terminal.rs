@@ -1,4 +1,5 @@
 use crate::display::{Colors, Display, ACCENT, LOGO, LOGO_COLOR, MUTED};
+use crate::i18n::t;
 use anyhow::{bail, Context, Result};
 use ratatui::style::Color;
 use serde_json::Value;
@@ -103,18 +104,20 @@ pub fn fingerprint(card: &shum_core::card::Card) -> String {
 pub fn find_contact<'a>(snapshot: &'a Value, selector: &str) -> Result<&'a Value> {
     let contacts = snapshot["contacts"]
         .as_array()
-        .context("Контактов пока нет")?;
+        .context(t("Контактов пока нет"))?;
     let id = crate::contact::resolve(
         selector,
         contacts
             .iter()
             .map(|c| (text(&c["id"]), text(&c["card"]["nostrKey"]))),
     )?
-    .context("Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.")?;
+    .context(t(
+        "Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.",
+    ))?;
     contacts
         .iter()
         .find(|c| c["id"] == id)
-        .context("Контакт не найден")
+        .context(t("Контакт не найден"))
 }
 pub fn print_qr(content: &str, ascii: bool) -> Result<()> {
     let code = qr(content, ascii)?;
@@ -174,7 +177,7 @@ pub fn qr(content: &str, ascii: bool) -> Result<String> {
 }
 pub fn decode_qr(path: &Path) -> Result<String> {
     if std::fs::metadata(path)?.len() > 32 * 1024 * 1024 {
-        bail!("Изображение больше 32 MiB");
+        bail!("{}", t("Изображение больше 32 MiB"));
     }
     let mut reader = image::ImageReader::open(path)?.with_guessed_format()?;
     let mut limits = image::Limits::default();
@@ -192,8 +195,8 @@ pub fn decode_qr(path: &Path) -> Result<String> {
         .collect();
     match links.len() {
         1 => Ok(links.into_iter().next().unwrap()),
-        0 => bail!("QR с приглашением Shum не найден"),
-        _ => bail!("На изображении несколько приглашений Shum"),
+        0 => bail!("{}", t("QR с приглашением Shum не найден")),
+        _ => bail!("{}", t("На изображении несколько приглашений Shum")),
     }
 }
 pub fn prompt(label: &str) -> Result<String> {
@@ -201,7 +204,7 @@ pub fn prompt(label: &str) -> Result<String> {
     io::stdout().flush()?;
     let mut value = String::new();
     if io::stdin().read_line(&mut value)? == 0 {
-        bail!("Ввод завершён");
+        bail!("{}", t("Ввод завершён"));
     }
     Ok(value.trim().to_owned())
 }
@@ -269,21 +272,10 @@ pub fn profile(snapshot: &Value, ascii: bool) {
         .map(|c| fingerprint(&c))
         .unwrap_or_default();
     let palette = Palette::stdout(ascii);
-    println!("  {} {}\n  {}\n\n  {} {chats}\n  {} {contacts}\n  {} пиксельный (для всех)\n  {} пока недоступно\n\n  {} {}\n  {} {}",
-        palette.paint(Tone::Accent, safe(text(&card["name"]))),
-        palette.paint(Tone::Muted, "· текущий"),
-        palette.paint(Tone::Muted, safe(text(&card["bio"]))),
-        palette.paint(Tone::Muted, "Чаты      "),
-        palette.paint(Tone::Muted, "Контакты  "),
-        palette.paint(Tone::Muted, "Аватар    "),
-        palette.paint(Tone::Muted, "Фото      "),
-        palette.paint(Tone::Muted, "Отпечаток "),
-        palette.paint(Tone::Command, fingerprint),
-        palette.paint(Tone::Muted, "Shum ID   "),
-        palette.paint(Tone::Command, safe(text(&snapshot["profile"]["ownerId"]))));
+    println!("{}", crate::i18n::format("  {} {}\n  {}\n\n  {} {chats}\n  {} {contacts}\n  {} пиксельный (для всех)\n  {} пока недоступно\n\n  {} {}\n  {} {}", &[("0", palette.paint(Tone::Accent, safe(text(&card["name"]))).to_string()), ("1", palette.paint(Tone::Muted, t("· текущий")).to_string()), ("2", palette.paint(Tone::Muted, safe(text(&card["bio"]))).to_string()), ("3", palette.paint(Tone::Muted, t("Чаты      ")).to_string()), ("chats", format!("{}", chats)), ("4", palette.paint(Tone::Muted, t("Контакты  ")).to_string()), ("contacts", format!("{}", contacts)), ("5", palette.paint(Tone::Muted, t("Аватар    ")).to_string()), ("6", palette.paint(Tone::Muted, t("Фото      ")).to_string()), ("7", palette.paint(Tone::Muted, t("Отпечаток ")).to_string()), ("8", palette.paint(Tone::Command, fingerprint).to_string()), ("9", palette.paint(Tone::Muted, "Shum ID   ").to_string()), ("10", palette.paint(Tone::Command, safe(text(&snapshot["profile"]["ownerId"]))).to_string())]));
     println!(
         "  {} {}",
-        palette.paint(Tone::Muted, "Сетевой ID"),
+        palette.paint(Tone::Muted, t("Сетевой ID")),
         palette.paint(Tone::Command, safe(text(&card["nostrKey"])))
     );
 }
@@ -315,7 +307,7 @@ pub fn render_chats(
         .as_array()
         .map(Vec::as_slice)
         .unwrap_or(&[]);
-    let invite = |c: &Value| text(&c["phase"]) == "incomingPending";
+    let invite = crate::invitations::is_invitation;
     for contact in contacts {
         let is_nearby = contact["nearby"] == true;
         let count = contact["unread"].as_u64().unwrap_or(0);
@@ -328,15 +320,17 @@ pub fn render_chats(
                 .rev()
                 .find(|m| m["contactID"] == contact["id"])
         });
-        let preview = if invite(contact) {
-            "приглашение в чат".into()
+        let preview = if contact["phase"] == "declinedLocally" {
+            t("Вы отклонили приглашение.").into()
+        } else if invite(contact) {
+            t("приглашение в чат").into()
         } else if contact["typing"] == true {
-            "печатает…".into()
+            t("печатает…").into()
         } else if nearby {
             crate::ui::nearby_label(contact)
         } else {
             last.map(|m| trim_width(text(&m["text"]), 33))
-                .unwrap_or_else(|| "нет сообщений".into())
+                .unwrap_or_else(|| t("нет сообщений").into())
         };
         let timestamp = last
             .and_then(|m| m["timestamp"].as_i64())
@@ -391,9 +385,9 @@ pub fn render_chats(
     writeln!(
         output,
         "\n  {} {} · {} {} · {} {} · {} {}",
-        palette.paint(Tone::Muted, "Все"),
+        palette.paint(Tone::Muted, t("Все")),
         contacts.len(),
-        palette.paint(Tone::Muted, "Рядом"),
+        palette.paint(Tone::Muted, t("Рядом")),
         palette.paint(
             Tone::Accent,
             contacts
@@ -402,12 +396,12 @@ pub fn render_chats(
                 .count()
                 .to_string()
         ),
-        palette.paint(Tone::Muted, "Приглашения"),
+        palette.paint(Tone::Muted, t("Приглашения")),
         palette.paint(
             Tone::Warning,
             contacts.iter().filter(|c| invite(c)).count().to_string()
         ),
-        palette.paint(Tone::Muted, "Непрочитанные"),
+        palette.paint(Tone::Muted, t("Непрочитанные")),
         palette.paint(
             Tone::Accent,
             contacts
@@ -421,7 +415,7 @@ pub fn render_chats(
     writeln!(
         output,
         "  {} {}",
-        palette.paint(Tone::Muted, "Фильтр:"),
+        palette.paint(Tone::Muted, t("Фильтр:")),
         palette.paint(Tone::Command, "--nearby  --invites  --unread")
     )
     .unwrap();
@@ -429,7 +423,7 @@ pub fn render_chats(
         writeln!(
             output,
             "  {} {}",
-            palette.paint(Tone::Muted, "Принять:"),
+            palette.paint(Tone::Muted, t("Принять:")),
             palette.paint(Tone::Command, "shum accept <ID>")
         )
         .unwrap();
@@ -452,14 +446,14 @@ pub fn bluetooth(snapshot: &Value, palette: Palette) -> String {
 
 pub fn push_status(snapshot: &Value) -> String {
     if snapshot["pushConfigured"] != true {
-        return "выключен".into();
+        return t("выключен").into();
     }
     match snapshot["pushLast"]["state"].as_str() {
-        Some("sending") => "отправляется запрос".into(),
-        Some("accepted") => "последний запрос принят сервером".into(),
+        Some("sending") => t("отправляется запрос").into(),
+        Some("accepted") => t("последний запрос принят сервером").into(),
         _ => match snapshot["pushError"].as_str() {
-            Some(error) => format!("ошибка: {}", safe(error)),
-            None => "настроен, результат запроса неизвестен".into(),
+            Some(error) => crate::i18n::format("ошибка: {}", &[("0", safe(error).to_string())]),
+            None => t("настроен, результат запроса неизвестен").into(),
         },
     }
 }
@@ -470,10 +464,10 @@ pub fn status(snapshot: &Value, root: &Path, ascii: bool) -> String {
     format!(
         "{} {}\n{} {}\n{} {}\n{}\n{} {}\n{} {}",
         p.paint(Tone::Accent, format!("Shum {}", env!("CARGO_PKG_VERSION"))),
-        p.paint(Tone::Muted, "· протокол v1"),
-        p.paint(Tone::Muted, "Профиль:"),
+        p.paint(Tone::Muted, t("· протокол v1")),
+        p.paint(Tone::Muted, t("Профиль:")),
         safe(text(&snapshot["card"]["name"])),
-        p.paint(Tone::Muted, "Релеи:"),
+        p.paint(Tone::Muted, t("Релеи:")),
         p.paint(
             if relays > 0 {
                 Tone::Accent
@@ -492,7 +486,7 @@ pub fn status(snapshot: &Value, root: &Path, ascii: bool) -> String {
             },
             push_status(snapshot)
         ),
-        p.paint(Tone::Muted, "Данные:"),
+        p.paint(Tone::Muted, t("Данные:")),
         safe(&root.display().to_string())
     )
 }
@@ -503,7 +497,7 @@ pub fn about(snapshot: &Value, root: &Path, ascii: bool) -> String {
     } else {
         (80, 32)
     };
-    let program = std::env::var("TERM_PROGRAM").unwrap_or_else(|_| "терминал".into());
+    let program = std::env::var("TERM_PROGRAM").unwrap_or_else(|_| t("терминал").into());
     let program = match program.as_str() {
         "Apple_Terminal" => "Terminal.app",
         "WarpTerminal" => "Warp",
@@ -553,7 +547,7 @@ pub fn render_about(
         format!(
             "{} {}",
             p.paint(Tone::Accent, format!("Shum {}", env!("CARGO_PKG_VERSION"))),
-            p.paint(Tone::Muted, "· протокол v1")
+            p.paint(Tone::Muted, t("· протокол v1"))
         ),
         p.paint(
             Tone::Muted,
@@ -584,15 +578,15 @@ pub fn render_about(
             }
         }
     };
-    field("Профиль", text(&snapshot["card"]["name"]), None);
+    field(t("Профиль"), text(&snapshot["card"]["name"]), None);
     field(
         "Shum ID",
         text(&snapshot["profile"]["ownerId"]),
         Some(Tone::Command),
     );
     field(
-        "Релеи",
-        &format!("{} подключено", relays.len()),
+        t("Релеи"),
+        &crate::i18n::format("{} подключено", &[("0", format!("{}", relays.len()))]),
         Some(if relays.is_empty() {
             Tone::Warning
         } else {
@@ -605,7 +599,7 @@ pub fn render_about(
     field(
         "Bluetooth",
         if ready {
-            "вкл · профиль виден рядом"
+            t("вкл · профиль виден рядом")
         } else {
             bluetooth
                 .strip_prefix("Bluetooth")
@@ -614,13 +608,13 @@ pub fn render_about(
         },
         Some(if ready { Tone::Accent } else { Tone::Warning }),
     );
-    field("Рядом", &nearby.to_string(), None);
-    field("Система", system, None);
+    field(t("Рядом"), &nearby.to_string(), None);
+    field(t("Система"), system, None);
     let root_display = std::env::var_os("HOME")
         .and_then(|home| root.strip_prefix(home).ok())
         .map(|relative| format!("~/{}", relative.display()))
         .unwrap_or_else(|| root.display().to_string());
-    field("Данные", &root_display, None);
+    field(t("Данные"), &root_display, None);
     rows.push(p.swatches());
     let mut output = String::new();
     if !ascii && !side_by_side {
@@ -644,10 +638,17 @@ pub fn render_about(
     }
     writeln!(
         output,
-        "\n  Мессенджер без номера телефона.\n  {}",
-        p.paint(
-            Tone::Muted,
-            "Ключи создаются на устройстве и не покидают его."
+        "{}",
+        crate::i18n::format(
+            "\n  Мессенджер без номера телефона.\n  {}",
+            &[(
+                "0",
+                p.paint(
+                    Tone::Muted,
+                    t("Ключи создаются на устройстве и не покидают его.")
+                )
+                .to_string()
+            )]
         )
     )
     .unwrap();

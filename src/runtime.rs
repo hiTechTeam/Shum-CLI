@@ -1,3 +1,4 @@
+use crate::i18n::t;
 use anyhow::{anyhow, bail, Context as _, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -37,7 +38,7 @@ pub fn now() -> i64 {
 pub fn random<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0; N];
     getrandom::fill(&mut bytes)
-        .map_err(|_| anyhow!("Системный генератор случайных чисел недоступен"))?;
+        .map_err(|_| anyhow!("{}", t("Системный генератор случайных чисел недоступен")))?;
     Ok(bytes)
 }
 pub fn uuid() -> Result<String> {
@@ -186,7 +187,7 @@ impl Runtime {
         if profile.keys.noise.noise_public().as_slice() != engine.inbox.own.noise_key
             || hex::encode(profile.keys.nostr.nostr_public()?) != engine.inbox.own.nostr_key
         {
-            bail!("Ключи профиля не совпадают с карточкой");
+            bail!("{}", t("Ключи профиля не совпадают с карточкой"));
         }
         let (pool, updates) = RelayPool::start(relays, &engine.inbox.own.nostr_key)?;
         Ok(Self {
@@ -226,6 +227,13 @@ impl Runtime {
         &mut self,
         operation: impl FnOnce(&mut Engine, &Context<'_>) -> shum_core::Result<Vec<Action>>,
     ) -> Result<()> {
+        self.apply_with_clear(operation, None)
+    }
+    fn apply_with_clear(
+        &mut self,
+        operation: impl FnOnce(&mut Engine, &Context<'_>) -> shum_core::Result<Vec<Action>>,
+        clear: Option<&str>,
+    ) -> Result<()> {
         let routes = self.routes();
         let id = uuid()?;
         let time = now();
@@ -241,14 +249,20 @@ impl Runtime {
             uuid: &id,
         };
         let transition = self.engine.prepare(|engine| operation(engine, &context))?;
-        let actions = persistence::commit_transition(
-            &mut self.profile.store,
-            &mut self.engine,
-            transition,
-            time,
-        )?;
-        self.dispatch(actions)
+        // Invitation history and engine state become durable in one encrypted commit,
+        // before any network action can be dispatched.
+        let mut next = persistence::project(self.profile.store.state(), &transition.state, time)?;
+        next["cliInvitationEvents"] = crate::invitations::project(
+            self.profile.store.state(),
+            &self.engine,
+            &transition.state,
+            clear,
+        );
+        self.profile.store.commit(next)?;
+        self.engine = transition.state;
+        self.dispatch(transition.actions)
     }
+
     fn dispatch(&mut self, actions: Vec<Action>) -> Result<()> {
         for action in actions {
             match action {
@@ -331,11 +345,25 @@ impl Runtime {
         )
     }
     fn contact(&self, selector: &str) -> Result<String> {
-        self.resolve_contact(selector)?
-            .context("Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.")
+        self.resolve_contact(selector)?.context(t(
+            "Контакт не найден. Добавьте карточку или пригласите по полному сетевому ID.",
+        ))
     }
     fn invite_contact(&mut self, selector: &str, action: InvitationAction) -> Result<Value> {
         let id = self.contact(selector)?;
+        use shum_core::rules::Phase;
+        let phase = self.engine.inbox.phase(&id);
+        let allowed = match action {
+            InvitationAction::Request => phase == Phase::Ready,
+            InvitationAction::Accept => {
+                matches!(phase, Phase::IncomingPending | Phase::DeclinedLocally)
+            }
+            InvitationAction::Decline => phase == Phase::IncomingPending,
+        };
+        if !allowed {
+            let phase = serde_json::to_value(phase)?;
+            bail!("{}", crate::invitations::hint(phase.as_str().unwrap_or("")));
+        }
         let nearby = self
             .nearby
             .values()
@@ -386,7 +414,7 @@ impl Runtime {
             messages.drain(..messages.len() - 2000);
         }
         let reactions:Vec<_>=self.engine.inbox.reactions.iter().map(|((message,person),mark)|json!({"messageID":message,"personID":person,"mark":mark})).collect();
-        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("CARGO_PKG_VERSION"),"clientCommandVersion":COMMAND_SCHEMA_VERSION,"build":self.build})
+        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"events":crate::invitations::stored(self.profile.store.state(), &self.engine),"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("CARGO_PKG_VERSION"),"clientCommandVersion":COMMAND_SCHEMA_VERSION,"build":self.build})
     }
     fn command(&mut self, request: Request) -> Result<Value> {
         match request {
@@ -411,7 +439,8 @@ impl Runtime {
             Request::Send { contact, text } => {
                 let id = self.contact(&contact)?;
                 if self.engine.inbox.phase(&id) != shum_core::rules::Phase::Accepted {
-                    bail!("Сначала пригласите собеседника: shum invite <ID>. После принятия приглашения можно отправлять сообщения");
+                    let phase = serde_json::to_value(self.engine.inbox.phase(&id))?;
+                    bail!("{}", crate::invitations::hint(phase.as_str().unwrap_or("")));
                 }
                 let ephemeral = secret()?;
                 self.apply(|e, c| e.send(&id, &text, None, &ephemeral, c))?;
@@ -452,10 +481,13 @@ impl Runtime {
             Request::Cancel { message } => self.apply(|e, c| e.cancel_sending(&message, c))?,
             Request::Clear { contact } => {
                 let id = self.contact(&contact)?;
-                self.apply(|e, c| {
-                    e.clear_chat(&id, c.now);
-                    Ok(vec![])
-                })?;
+                self.apply_with_clear(
+                    |e, c| {
+                        e.clear_chat(&id, c.now);
+                        Ok(vec![])
+                    },
+                    Some(&id),
+                )?;
             }
             Request::Block { contact, blocked } => {
                 let id = self.contact(&contact)?;
@@ -482,11 +514,11 @@ impl Runtime {
     }
     fn start_lookup(&mut self, key: String, reply: Reply, invite: bool) {
         if self.lookups.len() >= 8 {
-            let _ = reply.send(Err("Слишком много поисков".into()));
+            let _ = reply.send(Err(t("Слишком много поисков").into()));
             return;
         }
         if key == self.engine.inbox.own.nostr_key {
-            let _ = reply.send(Err("Это ваш профиль".into()));
+            let _ = reply.send(Err(t("Это ваш профиль").into()));
             return;
         }
         let prepared = (|| -> Result<String> {
@@ -609,7 +641,7 @@ impl Runtime {
                                                 || profile.avatar_bytes != 0
                                                 || profile.avatar_hash.is_some()
                                             {
-                                                bail!("Недействительный ответ профиля");
+                                                bail!("{}", t("Недействительный ответ профиля"));
                                             }
                                             Ok(card)
                                         })(
@@ -799,7 +831,7 @@ impl Runtime {
                 _=tick.tick()=>{
                     if let Err(error)=self.configure_bluetooth(){self.bluetooth["error"]=json!(error.to_string());}
                     if let Err(error)=self.apply(|e,c|Ok(e.tick(c.routes,c.now))){self.last_error=Some(error.to_string());}
-                    let expired:Vec<_>=self.lookups.iter().filter(|(_,l)|l.expires<=now()).map(|(id,_)|id.clone()).collect();for id in expired {if let Some(lookup)=self.lookups.remove(&id){let _=lookup.reply.send(Err("Контакт не ответил за 20 секунд. Для добавления офлайн используйте полную карточку или QR.".into()));}}
+                    let expired:Vec<_>=self.lookups.iter().filter(|(_,l)|l.expires<=now()).map(|(id,_)|id.clone()).collect();for id in expired {if let Some(lookup)=self.lookups.remove(&id){let _=lookup.reply.send(Err(t("Контакт не ответил за 20 секунд. Для добавления офлайн используйте полную карточку или QR.").into()));}}
                 }
                 _=shutdown_signal()=>break,
             }

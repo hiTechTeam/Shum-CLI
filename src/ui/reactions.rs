@@ -1,5 +1,6 @@
 //! Message selection keeps IDs across live snapshot updates.
 use super::{border, centered, reaction_art, safe, stamp, text, Action, View};
+use crate::i18n::t;
 use anyhow::{bail, Context, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
@@ -39,12 +40,12 @@ impl Picker {
 }
 
 pub(super) fn open(view: &mut View, snapshot: &Value) -> Result<()> {
-    let contact = view.opened.clone().context("Сначала откройте чат")?;
+    let contact = view.opened.clone().context(t("Сначала откройте чат"))?;
     if !super::contacts(snapshot, 0)
         .iter()
         .any(|c| c["id"] == contact && c["phase"] == "accepted")
     {
-        bail!("Реакции доступны после принятия приглашения");
+        bail!("{}", t("Реакции доступны после принятия приглашения"));
     }
     let mut picker = Picker {
         contact,
@@ -55,7 +56,7 @@ pub(super) fn open(view: &mut View, snapshot: &Value) -> Result<()> {
         &picker
             .messages(snapshot)
             .last()
-            .context("В этом чате ещё нет сообщений")?["id"],
+            .context(t("В этом чате ещё нет сообщений"))?["id"],
     )
     .into();
     view.reactions = Some(picker);
@@ -69,7 +70,7 @@ pub(super) fn handle(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result
     let mut picker = view.reactions.take().expect("active picker");
     let messages = picker.messages(snapshot);
     if messages.is_empty() {
-        bail!("Сообщения больше недоступны");
+        bail!("{}", t("Сообщения больше недоступны"));
     }
     let position = messages.iter().position(|m| m["id"] == picker.message);
     match (picker.reaction, key.code) {
@@ -101,7 +102,10 @@ pub(super) fn handle(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result
         (Some(_), KeyCode::End) => picker.reaction = Some(7),
         (_, KeyCode::Enter) if position.is_none() => {
             view.reactions = Some(picker);
-            bail!("Сообщение удалено. Выберите другое стрелками или нажмите Esc");
+            bail!(
+                "{}",
+                t("Сообщение удалено. Выберите другое стрелками или нажмите Esc")
+            );
         }
         (None, KeyCode::Enter) => {
             picker.reaction = Some(picker.own_reaction(snapshot).unwrap_or(0))
@@ -118,15 +122,19 @@ pub(super) fn handle(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result
     Ok(Action::None)
 }
 
+pub(super) fn popup_area(area: Rect) -> Rect {
+    centered(area, 72, 22)
+}
+
 pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: bool) {
     let Some(picker) = &view.reactions else {
         return;
     };
-    let popup = centered(frame.area(), 72, 22);
+    let popup = popup_area(frame.area());
     let title = if picker.reaction.is_some() {
-        "Выберите реакцию"
+        t("Выберите реакцию")
     } else {
-        "Выберите сообщение"
+        t("Выберите сообщение")
     };
     frame.render_widget(Clear, popup);
     let block = border(title, ascii);
@@ -153,15 +161,15 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
             format!(
                 "{} · {}\n{}",
                 if m["outgoing"] == true {
-                    "Вы"
+                    t("Вы")
                 } else {
-                    "Собеседник"
+                    t("Собеседник")
                 },
                 stamp(&m["timestamp"]),
                 safe(text(&m["text"]))
             )
         })
-        .unwrap_or_else(|| "Сообщение удалено. Выберите другое стрелками.".into());
+        .unwrap_or_else(|| t("Сообщение удалено. Выберите другое стрелками.").into());
     let footer = if let Some(index) = picker.reaction {
         frame.render_widget(
             Paragraph::new(preview).wrap(Wrap { trim: false }),
@@ -172,7 +180,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
         let capacity = usize::from(art_height).min(8);
         let start = index.saturating_sub(capacity - 1);
         let label_width = if inner.width >= 44 { 17 } else { 14 };
-        for (row, (i, name)) in reaction_art::NAMES
+        for (row, (i, name)) in reaction_art::names()
             .iter()
             .enumerate()
             .skip(start)
@@ -211,9 +219,9 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
             );
         }
         if picker.own_reaction(snapshot) == Some(index) {
-            "Стрелки: выбор · Enter: снять · Esc: назад"
+            t("Стрелки: выбор · Enter: снять · Esc: назад")
         } else {
-            "Стрелки: выбор · Enter: поставить · Esc: назад"
+            t("Стрелки: выбор · Enter: поставить · Esc: назад")
         }
     } else {
         let capacity = usize::from(inner.height.saturating_sub(5) / 2).max(1);
@@ -228,9 +236,9 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
         {
             let prefix = if Some(index) == position { ">" } else { " " };
             let name = if message["outgoing"] == true {
-                "Вы"
+                t("Вы")
             } else {
-                "Собеседник"
+                t("Собеседник")
             };
             let lines = vec![
                 Line::from(format!(
@@ -255,13 +263,13 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
             Paragraph::new(preview).wrap(Wrap { trim: false }),
             Rect::new(inner.x + 1, inner.bottom() - 4, inner.width - 2, 3),
         );
-        "↑↓: сообщение · Enter: реакции · Esc: отмена"
+        t("↑↓: сообщение · Enter: реакции · Esc: отмена")
     };
     let footer = if inner.width < 48 {
         if picker.reaction.is_some() {
-            "↑↓ выбор · Enter · Esc назад"
+            t("↑↓ выбор · Enter · Esc назад")
         } else {
-            "↑↓ выбор · Enter · Esc отмена"
+            t("↑↓ выбор · Enter · Esc отмена")
         }
     } else {
         footer

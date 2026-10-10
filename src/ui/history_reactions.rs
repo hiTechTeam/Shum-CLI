@@ -1,11 +1,15 @@
 //! Reaction authors are identified by keys, never by display names.
 use super::{reaction_art, safe, text, trim_width};
+use crate::i18n::t;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
+
+pub(super) const PNG_WIDTH: u16 = 2;
+pub(super) const PNG_HEIGHT: u16 = 1;
 
 pub(super) struct Icon {
     pub index: usize,
@@ -32,9 +36,9 @@ pub(super) fn rows(
             peer,
             contact
                 .map(|c| text(&c["card"]["name"]))
-                .unwrap_or("Собеседник"),
+                .unwrap_or(t("Собеседник")),
         ),
-        (owner, snapshot["card"]["name"].as_str().unwrap_or("Вы")),
+        (owner, snapshot["card"]["name"].as_str().unwrap_or(t("Вы"))),
     ];
     let mut groups: Vec<(usize, Vec<String>)> = Vec::new();
     for (id, name) in participants {
@@ -72,7 +76,7 @@ pub(super) fn rows(
     let (iw, height) = if text_only {
         (0, 1)
     } else if png {
-        (4, 2)
+        (usize::from(PNG_WIDTH), usize::from(PNG_HEIGHT))
     } else {
         (12, 6)
     };
@@ -81,7 +85,7 @@ pub(super) fn rows(
     let mut used = 0;
     for (n, (index, names)) in groups.iter().enumerate() {
         let prefix = if text_only {
-            format!("{} ", reaction_art::NAMES[*index])
+            format!("{} ", reaction_art::names()[*index])
         } else {
             String::new()
         };

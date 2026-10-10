@@ -2,6 +2,7 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
+use shum_cli::i18n::{self, t};
 use shum_cli::{
     ipc, onboarding,
     runtime::{self, Request},
@@ -24,76 +25,81 @@ const HELP_STYLES: clap::builder::Styles = clap::builder::Styles::styled()
     name = "shum",
     version,
     styles = HELP_STYLES,
-    about = "Мессенджер без номера телефона",
-    after_help = "Без команды открываются чаты. При первом запуске Shum предложит создать профиль."
+    about = t("Мессенджер без номера телефона"),
+    after_help = t("Без команды открываются чаты. При первом запуске Shum предложит создать профиль.")
 )]
 struct Args {
+    #[arg(help = t("Язык интерфейса"))]
+    #[arg(long, global = true)]
+    lang: Option<String>,
     #[arg(short = 'p', long, global = true)]
-    /// ID локального профиля из shum profile list
+    #[arg(help = t("ID локального профиля из shum profile list"))]
     profile: Option<String>,
     #[arg(long, global = true)]
-    /// Вывод JSON для скриптов
+    #[arg(help = t("Вывод JSON для скриптов"))]
     json: bool,
     #[arg(long, global = true)]
-    /// Без цвета и аватаров
+    #[arg(help = t("Без цвета и аватаров"))]
     ascii: bool,
     #[arg(long, global = true, env = "SHUM_DATA_DIR")]
     data_dir: Option<PathBuf>,
     #[arg(long, global = true)]
-    /// Адрес релея; можно повторить для нескольких
+    #[arg(help = t("Адрес релея; можно повторить для нескольких"))]
     relay: Vec<String>,
     #[arg(long, global = true)]
-    /// Адрес push API или off
+    #[arg(help = t("Адрес push API или off"))]
     push_url: Option<String>,
     #[arg(long, global = true, conflicts_with = "no_bluetooth")]
-    /// Включить Bluetooth для выбранного профиля
+    #[arg(help = t("Включить Bluetooth для выбранного профиля"))]
     bluetooth: bool,
     #[arg(long, global = true)]
-    /// Работать только через интернет
+    #[arg(help = t("Работать только через интернет"))]
     no_bluetooth: bool,
     #[command(subcommand)]
     command: Option<Commands>,
 }
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "Создать профиль и ключи")]
+    #[command(about = t("Показать или сохранить язык интерфейса"))]
+    Language { code: Option<String> },
+    #[command(about = t("Создать профиль и ключи"))]
     Init {
         #[arg(long)]
         name: Option<String>,
         #[arg(long)]
         headless: bool,
     },
-    #[command(about = "Профиль, имя и аватар")]
+    #[command(about = t("Профиль, имя и аватар"))]
     Profile {
         #[command(subcommand)]
         command: Option<ProfileCommand>,
     },
-    #[command(about = "Пригласить по Shum ID или полному сетевому ID")]
+    #[command(about = t("Пригласить по Shum ID или полному сетевому ID"))]
     Invite {
         #[arg(value_name = "ID")]
         contact: String,
     },
-    #[command(about = "Мой QR и полная карточка контакта")]
+    #[command(about = t("Мой QR и полная карточка контакта"))]
     Qr,
-    #[command(about = "Добавить контакт по ссылке или QR")]
+    #[command(about = t("Добавить контакт по ссылке или QR"))]
     Add {
         link: Option<String>,
         #[arg(long)]
         image: Option<PathBuf>,
     },
-    /// Список контактов и их Shum ID
+    #[command(about = t("Список контактов и их Shum ID"))]
     Contacts,
-    /// Принять приглашение в чат
+    #[command(about = t("Принять приглашение в чат"))]
     Accept {
         #[arg(value_name = "ID")]
         contact: String,
     },
-    /// Отклонить приглашение
+    #[command(about = t("Отклонить приглашение"))]
     Decline {
         #[arg(value_name = "ID")]
         contact: String,
     },
-    /// Чаты и фильтры
+    #[command(about = t("Чаты и фильтры"))]
     Chats {
         #[arg(long)]
         nearby: bool,
@@ -102,61 +108,61 @@ enum Commands {
         #[arg(long)]
         unread: bool,
     },
-    /// Открыть чат; вне терминала ждать новые сообщения
+    #[command(about = t("Открыть чат; вне терминала ждать новые сообщения"))]
     Open {
         #[arg(value_name = "ID")]
         contact: String,
     },
-    /// Терминальный интерфейс, при желании сразу в чате
+    #[command(about = t("Терминальный интерфейс, при желании сразу в чате"))]
     Ui {
         #[arg(value_name = "ID")]
         contact: Option<String>,
     },
-    /// Отправить сообщение принятому контакту
+    #[command(about = t("Отправить сообщение принятому контакту"))]
     Send {
         #[arg(value_name = "ID")]
         contact: String,
         text: String,
     },
-    /// Отметить чат прочитанным
+    #[command(about = t("Отметить чат прочитанным"))]
     Read {
         #[arg(value_name = "ID")]
         contact: String,
     },
-    /// Поставить или снять реакцию на сообщение
+    #[command(about = t("Поставить или снять реакцию на сообщение"))]
     React { message: String, reaction: String },
-    /// Очистить чат на этом компьютере
+    #[command(about = t("Очистить чат на этом компьютере"))]
     Clear {
         #[arg(value_name = "ID")]
         contact: String,
         #[arg(long)]
         confirm: bool,
     },
-    /// Отменить отправку сообщения
+    #[command(about = t("Отменить отправку сообщения"))]
     Cancel { message: String },
-    /// Заблокировать контакт; --undo разблокировать
+    #[command(about = t("Заблокировать контакт; --undo разблокировать"))]
     Block {
         #[arg(value_name = "ID")]
         contact: String,
         #[arg(long)]
         undo: bool,
     },
-    /// Сверить отпечатки ключей
+    #[command(about = t("Сверить отпечатки ключей"))]
     Keys {
         #[command(subcommand)]
         command: KeysCommand,
     },
-    /// Остановить и заблокировать сеанс профиля
+    #[command(about = t("Остановить и заблокировать сеанс профиля"))]
     Lock,
-    /// Снять блокировку сеанса
+    #[command(about = t("Снять блокировку сеанса"))]
     Unlock,
-    /// Подключения и состояние службы
+    #[command(about = t("Подключения и состояние службы"))]
     Status,
-    /// Версия, профиль и каталог данных
+    #[command(about = t("Версия, профиль и каталог данных"))]
     About,
-    /// Устройства рядом и состояние Bluetooth
+    #[command(about = t("Устройства рядом и состояние Bluetooth"))]
     Nearby,
-    /// Фоновая служба: автозапуск или остановка
+    #[command(about = t("Фоновая служба: автозапуск или остановка"))]
     Daemon {
         #[arg(long, hide = true, conflicts_with_all = ["install", "stop", "uninstall", "refresh"])]
         run: bool,
@@ -164,13 +170,13 @@ enum Commands {
         install: bool,
         #[arg(long, conflicts_with_all = ["uninstall", "refresh"])]
         stop: bool,
-        /// Остановить все службы и удалить автозапуск, сохранив данные
+        #[arg(help = t("Остановить все службы и удалить автозапуск, сохранив данные"))]
         #[arg(long)]
         uninstall: bool,
-        /// Также безвозвратно удалить все профили, ключи и историю
+        #[arg(help = t("Также безвозвратно удалить все профили, ключи и историю"))]
         #[arg(long, requires = "uninstall")]
         purge: bool,
-        /// Подтверждение полного удаления: DELETE
+        #[arg(help = t("Подтверждение полного удаления: DELETE"))]
         #[arg(long, requires = "purge")]
         confirm: Option<String>,
         /// Used by the standalone installer to update active profiles only
@@ -228,7 +234,7 @@ fn root(args: &Args) -> Result<PathBuf> {
         return Ok(std::path::absolute(path)?);
     }
     Ok(directories::ProjectDirs::from("org", "Shum", "Shum")
-        .context("Укажите --data-dir")?
+        .context(t("Укажите --data-dir"))?
         .data_local_dir()
         .to_owned())
 }
@@ -236,6 +242,30 @@ fn root(args: &Args) -> Result<PathBuf> {
 async fn main() -> std::process::ExitCode {
     let json_mode = std::env::args().any(|a| a == "--json");
     let ascii_mode = std::env::args().any(|a| a == "--ascii");
+    let raw: Vec<String> = std::env::args().collect();
+    let option = |name: &str| {
+        raw.iter()
+            .take_while(|a| a.as_str() != "--")
+            .enumerate()
+            .find_map(|(i, arg)| {
+                if arg == name {
+                    raw.get(i + 1).cloned()
+                } else {
+                    arg.strip_prefix(&format!("{name}=")).map(str::to_owned)
+                }
+            })
+    };
+    let language_root = option("--data-dir")
+        .or_else(|| std::env::var("SHUM_DATA_DIR").ok())
+        .map(PathBuf::from);
+    if let Err(error) = i18n::configure(option("--lang").as_deref(), language_root.as_deref()) {
+        if json_mode {
+            println!("{}", json!({"error":error.to_string()}));
+        } else {
+            eprintln!("Shum: {error}");
+        }
+        return std::process::ExitCode::from(2);
+    }
     let args = match Args::try_parse() {
         Ok(args) => args,
         Err(error) => {
@@ -277,6 +307,20 @@ async fn run(args: Args) -> Result<()> {
     let _build = shum_cli::identity::current()?;
     let palette = Palette::stdout(args.ascii);
     let root = root(&args)?;
+    if let Some(Commands::Language { code }) = &args.command {
+        if let Some(code) = code {
+            i18n::save(code, &root)?;
+        }
+        if args.json {
+            println!(
+                "{}",
+                json!({"language":i18n::current(),"languages":i18n::LANGUAGES})
+            );
+        } else {
+            println!("{}", i18n::listing());
+        }
+        return Ok(());
+    }
     if let Some(Commands::Daemon {
         uninstall: true,
         purge,
@@ -287,13 +331,13 @@ async fn run(args: Args) -> Result<()> {
         let result = if *purge {
             let typed = match confirm {
                 Some(value) => value.clone(),
-                None if io::stdin().is_terminal() && !args.json => terminal::prompt(
+                None if io::stdin().is_terminal() && !args.json => terminal::prompt(t(
                     "Все профили, ключи и переписка будут удалены безвозвратно. Введите DELETE: ",
-                )?,
-                _ => bail!("Для полного удаления укажите --confirm DELETE"),
+                ))?,
+                _ => bail!("{}", t("Для полного удаления укажите --confirm DELETE")),
             };
             if typed != "DELETE" {
-                bail!("Подтверждение не совпало, удаление отменено");
+                bail!("{}", t("Подтверждение не совпало, удаление отменено"));
             }
             shum_cli::service::purge(&root, args.data_dir.is_none()).await?
         } else {
@@ -305,16 +349,16 @@ async fn run(args: Args) -> Result<()> {
             &palette.paint(
                 Tone::Accent,
                 if *purge {
-                    "Службы, профили, ключи и переписка удалены. Пакет Homebrew: brew uninstall shum."
+                    t("Службы, профили, ключи и переписка удалены. Пакет Homebrew: brew uninstall shum.")
                 } else {
-                    "Службы и автозапуск удалены. Данные профилей сохранены."
+                    t("Службы и автозапуск удалены. Данные профилей сохранены.")
                 },
             ),
         );
     }
     if matches!(args.command, Some(Commands::Daemon { refresh: true, .. })) {
         let result = shum_cli::service::refresh(&root, args.data_dir.is_none()).await?;
-        return output(result, args.json, "Активные службы обновлены.");
+        return output(result, args.json, t("Активные службы обновлены."));
     }
     let profiles = Profiles::new(&root)?;
     let settings = onboarding::Settings {
@@ -366,7 +410,7 @@ async fn run(args: Args) -> Result<()> {
             };
             created
         } else {
-            bail!("Укажите shum init --name <имя>");
+            bail!("{}", t("Укажите shum init --name <имя>"));
         };
         if !args.json {
             terminal::avatar(created.card.avatar_seed.unwrap_or(0), args.ascii);
@@ -435,10 +479,12 @@ async fn run(args: Args) -> Result<()> {
             args.json,
             &palette.paint(
                 Tone::Accent,
-                format!(
+                i18n::format(
                     "Выбран профиль {} (ID {})",
-                    terminal::safe(&profile.name),
-                    id
+                    &[
+                        ("0", terminal::safe(&profile.name).to_string()),
+                        ("1", id.to_string()),
+                    ],
                 ),
             ),
         );
@@ -452,25 +498,33 @@ async fn run(args: Args) -> Result<()> {
             .1
             .into_iter()
             .find(|profile| &profile.id == id)
-            .context("Укажите полный ID профиля из shum profile list; удаление по имени не поддерживается")?;
+            .context(t("Укажите полный ID профиля из shum profile list; удаление по имени не поддерживается"))?;
         let typed = match confirm {
             Some(name) => name.clone(),
-            None if io::stdin().is_terminal() && !args.json => terminal::prompt(&format!(
+            None if io::stdin().is_terminal() && !args.json => terminal::prompt(&i18n::format(
                 "Удалить профиль {} (ID {}) и историю? Введите имя для подтверждения: ",
-                terminal::safe(&profile.name),
-                profile.id
+                &[
+                    ("0", terminal::safe(&profile.name).to_string()),
+                    ("1", profile.id.to_string()),
+                ],
             ))?,
-            _ => bail!("Для удаления укажите --confirm {:?}", profile.name),
+            _ => bail!(
+                "{}",
+                i18n::format(
+                    "Для удаления укажите --confirm {:?}",
+                    &[("0", format!("{:?}", profile.name))]
+                )
+            ),
         };
         if typed != profile.name {
-            bail!("Имя не совпало, удаление отменено");
+            bail!("{}", t("Имя не совпало, удаление отменено"));
         }
         ipc::stop(&root, &profile.id).await?;
         profiles.delete(&profile.id)?;
         return output(
             json!({"deleted":profile.id}),
             args.json,
-            &palette.paint(Tone::Accent, "Профиль удалён"),
+            &palette.paint(Tone::Accent, t("Профиль удалён")),
         );
     }
     let profile = ipc::select(&profiles, args.profile.as_deref())?;
@@ -487,7 +541,7 @@ async fn run(args: Args) -> Result<()> {
             args.json,
             &palette.paint(
                 Tone::Accent,
-                "Профиль заблокирован. Для продолжения: shum unlock",
+                t("Профиль заблокирован. Для продолжения: shum unlock"),
             ),
         );
     }
@@ -502,7 +556,7 @@ async fn run(args: Args) -> Result<()> {
         return output(
             json!({"locked":false}),
             args.json,
-            &palette.paint(Tone::Accent, "Профиль открыт"),
+            &palette.paint(Tone::Accent, t("Профиль открыт")),
         );
     }
     if let Some(Commands::Daemon { stop: true, .. }) = &args.command {
@@ -511,7 +565,7 @@ async fn run(args: Args) -> Result<()> {
         return output(
             json!({"stopped":true}),
             args.json,
-            &palette.paint(Tone::Accent, "Служба остановлена"),
+            &palette.paint(Tone::Accent, t("Служба остановлена")),
         );
     }
     if let Some(Commands::Daemon { install: true, .. }) = &args.command {
@@ -521,7 +575,7 @@ async fn run(args: Args) -> Result<()> {
         return output(
             json!({"installed":true}),
             args.json,
-            &palette.paint(Tone::Accent, "Автозапуск службы установлен"),
+            &palette.paint(Tone::Accent, t("Автозапуск службы установлен")),
         );
     }
     if !args.relay.is_empty() || args.push_url.is_some() || args.bluetooth || args.no_bluetooth {
@@ -572,12 +626,12 @@ async fn run(args: Args) -> Result<()> {
             return output(
                 snapshot,
                 args.json,
-                "TUI требует терминал. Используйте shum chats или --json.",
+                t("TUI требует терминал. Используйте shum chats или --json."),
             );
         }
         Some(Commands::Add { link, image }) => {
             if link.is_some() == image.is_some() {
-                bail!("Укажите одну ссылку либо --image <png>");
+                bail!("{}", t("Укажите одну ссылку либо --image <png>"));
             }
             Request::Add {
                 link: if let Some(path) = image {
@@ -606,14 +660,14 @@ async fn run(args: Args) -> Result<()> {
         Some(Commands::React { message, reaction }) => Request::Reaction {
             message: message.clone(),
             reaction: serde_json::from_value::<ReactionKind>(json!(reaction))
-                .context("Неизвестная реакция")?,
+                .context(t("Неизвестная реакция"))?,
         },
         Some(Commands::Clear { contact, confirm }) => {
             if !confirm
                 && (!io::stdin().is_terminal()
-                    || terminal::prompt("Очистить этот чат здесь? Напишите да: ")? != "да")
+                    || terminal::prompt(t("Очистить этот чат здесь? Напишите да: "))? != t("да"))
             {
-                bail!("Для очистки требуется --confirm");
+                bail!("{}", t("Для очистки требуется --confirm"));
             }
             Request::Clear {
                 contact: contact.clone(),
@@ -649,7 +703,10 @@ async fn run(args: Args) -> Result<()> {
                 }),
         }) => {
             if photo.is_some() {
-                bail!("Фото-аватары пока недоступны. iPhone 1.0 не принимает пакеты фото.");
+                bail!(
+                    "{}",
+                    t("Фото-аватары пока недоступны. iPhone 1.0 не принимает пакеты фото.")
+                );
             }
             let seed = if *random {
                 Some(u64::from_le_bytes(runtime::random()?))
@@ -657,7 +714,7 @@ async fn run(args: Args) -> Result<()> {
                 *seed
             };
             if seed.is_none() {
-                bail!("Укажите --random или --seed <число>");
+                bail!("{}", t("Укажите --random или --seed <число>"));
             }
             Request::Profile {
                 name: None,
@@ -701,7 +758,7 @@ async fn run(args: Args) -> Result<()> {
                     .flatten()
                     .filter(|c| {
                         (!nearby || c["nearby"] == true)
-                            && (!invites || c["phase"] == "incomingPending")
+                            && (!invites || shum_cli::invitations::is_invitation(c))
                             && (!unread || c["unread"].as_u64().unwrap_or(0) > 0)
                     })
                     .cloned()
@@ -740,13 +797,7 @@ async fn run(args: Args) -> Result<()> {
                     "",
                 )
             } else {
-                println!(
-                    "{}\nОтпечаток в iPhone: {}\nNoise / Shum ID: {}\nEd25519: {}\nСверьте отпечаток с собеседником: Профиль → Безопасность.",
-                    terminal::safe(&card.name),
-                    palette.paint(Tone::Accent, terminal::fingerprint(&card)),
-                    palette.paint(Tone::Command, fingerprint),
-                    palette.paint(Tone::Command, signing)
-                );
+                println!("{}", i18n::format("{}\nОтпечаток в iPhone: {}\nNoise / Shum ID: {}\nEd25519: {}\nСверьте отпечаток с собеседником: Профиль → Безопасность.", &[("0", terminal::safe(&card.name).to_string()), ("1", palette.paint(Tone::Accent, terminal::fingerprint(&card)).to_string()), ("2", palette.paint(Tone::Command, fingerprint).to_string()), ("3", palette.paint(Tone::Command, signing).to_string())]));
                 if qr {
                     terminal::print_qr(&card.invitation()?, args.ascii)?;
                 }
@@ -781,7 +832,11 @@ async fn run(args: Args) -> Result<()> {
             let description = terminal::status(&value, &root, args.ascii);
             output(value, args.json, &description)
         }
-        _ => output(value, args.json, &palette.paint(Tone::Accent, "Сохранено")),
+        _ => output(
+            value,
+            args.json,
+            &palette.paint(Tone::Accent, t("Сохранено")),
+        ),
     }
 }
 async fn stream_chat(
@@ -794,12 +849,7 @@ async fn stream_chat(
     loop {
         let snapshot = ipc::request(root, profile, Request::Snapshot).await?;
         let id = terminal::text(&terminal::find_contact(&snapshot, contact)?["id"]);
-        for message in snapshot["messages"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|m| m["contactID"] == id)
-        {
+        for message in shum_cli::invitations::timeline(&snapshot, id) {
             if seen
                 .insert(
                     message["id"].as_str().unwrap_or("").to_owned(),
@@ -810,11 +860,13 @@ async fn stream_chat(
             {
                 if json_mode {
                     println!("{message}");
+                } else if message["kind"].is_string() {
+                    println!("{}", shum_cli::invitations::label(message));
                 } else {
                     println!(
                         "{}: {}",
                         if message["outgoing"] == true {
-                            "я"
+                            t("я")
                         } else {
                             contact
                         },

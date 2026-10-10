@@ -129,7 +129,7 @@ fn icons_stay_inside_history_on_scroll_resize_and_modal() {
                 let buffer = render(&s, &mut view, warp, width, 24);
                 for (index, cell) in buffer.content.iter().enumerate() {
                     if cell.symbol().contains("\x1b_Ga=T,") {
-                        assert!(cell.symbol().contains("c=4,r=2,"));
+                        assert!(cell.symbol().contains("c=2,r=1,"));
                         let row = index / usize::from(width);
                         assert!(row > 3 && row < 18, "reaction must stay above input: {row}");
                     }
@@ -140,4 +140,97 @@ fn icons_stay_inside_history_on_scroll_resize_and_modal() {
     let mut view = View::chat("peer");
     view.help = true;
     assert_eq!(png_count(&render(&s, &mut view, true, 140, 32)), 0);
+}
+
+#[test]
+fn picker_keeps_uncovered_reactions_and_restores_covered_ones_on_close() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::layout::Rect;
+    use shum_cli::ui::handle_key;
+
+    fn placements(buffer: &Buffer) -> Vec<Rect> {
+        buffer
+            .content
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| {
+                if !c.symbol().contains("\x1b_Ga=T,") {
+                    return None;
+                }
+                assert!(c.symbol().contains("c=2,r=1,"), "compact inline reaction");
+                let width = usize::from(buffer.area.width);
+                Some(Rect::new((i % width) as u16 - 1, (i / width) as u16, 2, 1))
+            })
+            .collect()
+    }
+    let mut s = snapshot(Value::Null, Value::Null);
+    s["messages"] = json!((0..20).map(|i| json!({
+        "id":format!("m{i}"), "contactID":"peer", "text":format!("Message {i}"), "outgoing":false
+    })).collect::<Vec<_>>());
+    s["reactions"] = json!((0..20)
+        .map(|i| json!({
+            "messageID":format!("m{i}"), "personID":"peer", "mark":{"reaction":"heart"}
+        }))
+        .collect::<Vec<_>>());
+    let display = Display::for_terminal("WarpTerminal", "xterm-256color", "", false, false);
+    let mut picker = Picker::halfblocks();
+    picker.set_protocol_type(display.images);
+    let mut pictures = Pictures::with_display(picker, display);
+    let mut terminal = Terminal::new(TestBackend::new(160, 50)).unwrap();
+    let mut paint = |view: &mut View| {
+        terminal
+            .draw(|f| draw(f, &s, view, &mut pictures, false))
+            .unwrap();
+        placements(terminal.backend().buffer())
+    };
+    let mut view = View::chat("peer");
+    let before = paint(&mut view);
+    let popup = Rect::new(44, 14, 72, 22);
+    let uncovered = before
+        .iter()
+        .copied()
+        .filter(|rect| rect.intersection(popup).is_empty())
+        .collect::<Vec<_>>();
+    assert!(
+        !uncovered.is_empty() && uncovered.len() < before.len(),
+        "exercise both covered and uncovered icons"
+    );
+    let key = |view: &mut View, code| {
+        handle_key(view, &s, KeyEvent::new(code, KeyModifiers::NONE)).unwrap()
+    };
+    view.input = "/react".into();
+    key(&mut view, KeyCode::Enter);
+    assert_eq!(
+        paint(&mut view),
+        uncovered,
+        "message picker preserves visible reactions"
+    );
+    key(&mut view, KeyCode::Enter);
+    assert_eq!(
+        paint(&mut view),
+        uncovered,
+        "reaction picker preserves visible reactions"
+    );
+    key(&mut view, KeyCode::Down);
+    assert_eq!(
+        paint(&mut view),
+        uncovered,
+        "moving selection does not erase chat icons"
+    );
+    key(&mut view, KeyCode::Esc);
+    key(&mut view, KeyCode::Esc);
+    assert_eq!(
+        paint(&mut view),
+        before,
+        "closing the picker restores every reaction"
+    );
+    view.input = "/react".into();
+    key(&mut view, KeyCode::Enter);
+    key(&mut view, KeyCode::Enter);
+    key(&mut view, KeyCode::Enter);
+    assert_eq!(
+        paint(&mut view),
+        before,
+        "confirming also restores the chat's existing reactions"
+    );
 }

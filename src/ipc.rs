@@ -1,4 +1,5 @@
 //! Local authenticated IPC. The daemon alone owns a profile database.
+use crate::i18n::t;
 use crate::runtime::{Command, Request, Runtime};
 #[cfg(not(target_os = "macos"))]
 use anyhow::Context;
@@ -32,10 +33,18 @@ pub fn select(profiles: &Profiles, selector: Option<&str>) -> Result<Profile> {
     let (selected, list) = profiles.list()?;
     let name = selector
         .or(selected.as_deref())
-        .ok_or_else(|| anyhow!("Профиля пока нет. Выполните shum init."))?;
+        .ok_or_else(|| anyhow!("{}", t("Профиля пока нет. Выполните shum init.")))?;
     list.into_iter()
         .find(|p| !p.deleting && p.id == name)
-        .ok_or_else(|| anyhow!("Профиль не найден: {name}. Укажите ID из shum profile list."))
+        .ok_or_else(|| {
+            anyhow!(
+                "{}",
+                crate::i18n::format(
+                    "Профиль не найден: {name}. Укажите ID из shum profile list.",
+                    &[("name", name.to_string())]
+                )
+            )
+        })
 }
 fn endpoint(root: &Path, id: &str) -> PathBuf {
     root.join(id).join("daemon.json")
@@ -44,20 +53,20 @@ fn read_endpoint(root: &Path, id: &str) -> Result<Endpoint> {
     let path = endpoint(root, id);
     let metadata = fs::symlink_metadata(&path)?;
     if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 4096 {
-        bail!("Недействительный адрес службы");
+        bail!("{}", t("Недействительный адрес службы"));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if metadata.permissions().mode() & 0o777 != 0o600 {
-            bail!("Адрес службы должен иметь права 0600");
+            bail!("{}", t("Адрес службы должен иметь права 0600"));
         }
     }
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 async fn write_frame(stream: &mut TcpStream, bytes: &[u8]) -> Result<()> {
     if bytes.len() > LIMIT {
-        bail!("Ответ превышает лимит IPC");
+        bail!("{}", t("Ответ превышает лимит IPC"));
     }
     stream.write_u32(bytes.len() as u32).await?;
     stream.write_all(bytes).await?;
@@ -66,7 +75,7 @@ async fn write_frame(stream: &mut TcpStream, bytes: &[u8]) -> Result<()> {
 async fn read_frame(stream: &mut TcpStream) -> Result<Vec<u8>> {
     let length = stream.read_u32().await? as usize;
     if length > LIMIT {
-        bail!("Размер IPC превышает лимит");
+        bail!("{}", t("Размер IPC превышает лимит"));
     }
     let mut bytes = vec![0; length];
     stream.read_exact(&mut bytes).await?;
@@ -81,7 +90,7 @@ pub async fn request(root: &Path, id: &str, request: Request) -> Result<Value> {
     .await??;
     let token: Vec<u8> = hex::decode(&endpoint.token)?;
     if token.len() != 32 {
-        bail!("Недействительный токен службы");
+        bail!("{}", t("Недействительный токен службы"));
     }
     timeout(Duration::from_secs(2), stream.write_all(&token)).await??;
     timeout(
@@ -110,7 +119,7 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
             .as_u64()
             .is_some_and(|v| v > crate::runtime::COMMAND_SCHEMA_VERSION)
         {
-            bail!("Обновите CLI: запущена более новая служба.");
+            bail!("{}", t("Обновите CLI: запущена более новая служба."));
         }
     }
     #[cfg(target_os = "macos")]
@@ -126,7 +135,7 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
                 return Ok(())
             }
             Some(version) if version > crate::runtime::COMMAND_SCHEMA_VERSION => {
-                bail!("Обновите CLI: запущена более новая служба.")
+                bail!("{}", t("Обновите CLI: запущена более новая служба."))
             }
             // Gracefully checkpoint the old service before loading the new command contract.
             _ => stop(root, id).await?,
@@ -134,7 +143,7 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
     }
     stop(root, id).await?;
     if root.join(id).join("locked").exists() {
-        bail!("Профиль заблокирован. Выполните shum unlock.");
+        bail!("{}", t("Профиль заблокирован. Выполните shum unlock."));
     }
     let mut options = OpenOptions::new();
     options.create(true).append(true);
@@ -178,7 +187,7 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
         }
         command
             .spawn()
-            .context("Не удалось запустить службу Shum")?
+            .context(t("Не удалось запустить службу Shum"))?
     };
     // On the first macOS launch, reading the profile can wait for the user
     // to approve Keychain access for the app's new code identity.
@@ -190,7 +199,10 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
             {
                 return Ok(());
             }
-            bail!("Версия службы не соответствует CLI. Перезапустите службу.");
+            bail!(
+                "{}",
+                t("Версия службы не соответствует CLI. Перезапустите службу.")
+            );
         }
         #[cfg(not(target_os = "macos"))]
         if child.try_wait()?.is_some() {
@@ -202,16 +214,19 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
                 }
             }
             bail!(
-                "Служба завершилась. Диагностика: {}",
-                root.join(id).join("daemon.log").display()
+                "{}",
+                crate::i18n::format(
+                    "Служба завершилась. Диагностика: {}",
+                    &[(
+                        "0",
+                        format!("{}", root.join(id).join("daemon.log").display())
+                    )]
+                )
             );
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    bail!(
-        "Служба не запустилась за {startup_seconds} секунд. Проверьте системный запрос Shum. Диагностика: {}",
-        root.join(id).join("daemon.log").display()
-    )
+    bail!("{}", crate::i18n::format("Служба не запустилась за {startup_seconds} секунд. Проверьте системный запрос Shum. Диагностика: {}", &[("startup_seconds", format!("{}", startup_seconds)), ("0", format!("{}", root.join(id).join("daemon.log").display()))]))
 }
 pub async fn stop(root: &Path, id: &str) -> Result<()> {
     if !endpoint(root, id).exists() {
@@ -222,7 +237,7 @@ pub async fn stop(root: &Path, id: &str) -> Result<()> {
         let lock_path = root.join(id).join("messages.sqlite.lock");
         let metadata = fs::symlink_metadata(&lock_path)?;
         if !metadata.is_file() || metadata.file_type().is_symlink() {
-            bail!("Недействительная блокировка базы профиля");
+            bail!("{}", t("Недействительная блокировка базы профиля"));
         }
         let lock = OpenOptions::new()
             .read(true)
@@ -239,7 +254,7 @@ pub async fn stop(root: &Path, id: &str) -> Result<()> {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    bail!("Служба не завершилась за 5 секунд")
+    bail!("{}", t("Служба не завершилась за 5 секунд"))
 }
 struct EndpointGuard(PathBuf);
 impl Drop for EndpointGuard {
@@ -249,7 +264,7 @@ impl Drop for EndpointGuard {
 }
 pub async fn serve(root: &Path, id: &str) -> Result<()> {
     if root.join(id).join("locked").exists() {
-        bail!("Профиль заблокирован");
+        bail!("{}", t("Профиль заблокирован"));
     }
     let profiles = Profiles::new(root)?;
     let open = profiles.open(Some(id))?;

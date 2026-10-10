@@ -201,3 +201,50 @@ fn all_pixel_reactions_render_in_rgb_indexed_and_ascii_after_resize() {
         }
     }
 }
+
+#[test]
+fn ctrl_r_opens_picker_in_chat_and_preserves_draft_on_cancel() {
+    let snapshot = snapshot();
+    for letter in ['r', 'к'] {
+        let mut view = View::chat("peer");
+        view.input = "Unsent draft / {name}".into();
+        handle_key(
+            &mut view,
+            &snapshot,
+            KeyEvent::new(KeyCode::Char(letter), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        key(&mut view, &snapshot, KeyCode::Up).unwrap();
+        key(&mut view, &snapshot, KeyCode::Enter).unwrap();
+        key(&mut view, &snapshot, KeyCode::Esc).unwrap();
+        key(&mut view, &snapshot, KeyCode::Esc).unwrap();
+        assert_eq!(view.input, "Unsent draft / {name}");
+        handle_key(
+            &mut view,
+            &snapshot,
+            KeyEvent::new(KeyCode::Char(letter), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        key(&mut view, &snapshot, KeyCode::Enter).unwrap();
+        reaction(
+            key(&mut view, &snapshot, KeyCode::Enter).unwrap(),
+            "two",
+            ReactionKind::Heart,
+        );
+    }
+}
+
+#[test]
+fn ctrl_r_requires_a_chat_and_does_not_open_over_another_modal() {
+    let snapshot = snapshot();
+    let ctrl_r = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL);
+    assert!(handle_key(&mut View::default(), &snapshot, ctrl_r).is_err());
+    let mut view = View::chat("peer");
+    view.help = true;
+    view.input = "draft".into();
+    handle_key(&mut view, &snapshot, ctrl_r).unwrap();
+    assert!(view.help);
+    assert_eq!(view.input, "draft");
+    key(&mut view, &snapshot, KeyCode::Esc).unwrap();
+    assert!(!view.help);
+}

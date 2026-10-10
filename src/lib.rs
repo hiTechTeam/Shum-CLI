@@ -4,7 +4,9 @@ pub mod avatar;
 pub mod contact;
 pub mod display;
 mod graphics;
+pub mod i18n;
 pub mod identity;
+pub mod invitations;
 pub mod ipc;
 #[cfg(target_os = "macos")]
 mod macos;

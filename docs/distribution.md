@@ -57,13 +57,13 @@ Silicon не заменяет настоящий Intel Mac. Windows и Linux н�
 Проверка пакета без установки:
 
 ```sh
-python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.7-macOS-universal-unsigned.pkg
+python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.8-macOS-universal-unsigned.pkg
 ```
 
 ## Homebrew
 
 Публичный tap: [hiTechTeam/homebrew-shum](https://github.com/hiTechTeam/homebrew-shum).
-Формула 0.1.7 устанавливает `Shum.app` в `prefix`, создаёт ссылку
+Формула 0.1.8 устанавливает `Shum.app` в `prefix`, создаёт ссылку
 `bin/shum`, проверяет SHA-256 и версию:
 
 ```sh

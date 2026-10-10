@@ -1,4 +1,5 @@
 //! Client-side pixel artwork, matching ShumReactionArt.swift (12 × 12).
+use crate::i18n::t;
 use ratatui::{layout::Rect, style::Color, Frame};
 use shum_core::packet::ReactionKind;
 
@@ -12,16 +13,18 @@ pub(super) const KINDS: [ReactionKind; 8] = [
     ReactionKind::Hundred,
     ReactionKind::Horror,
 ];
-pub(super) const NAMES: [&str; 8] = [
-    "Сердце",
-    "Нравится",
-    "Не нравится",
-    "Смешно",
-    "Огонь",
-    "Гроб",
-    "100",
-    "Кошмар",
-];
+pub(super) fn names() -> [&'static str; 8] {
+    [
+        t("Сердце"),
+        t("Нравится"),
+        t("Не нравится"),
+        t("Смешно"),
+        t("Огонь"),
+        t("Гроб"),
+        "100",
+        t("Кошмар"),
+    ]
+}
 
 pub(super) fn art(kind: ReactionKind) -> ([&'static str; 12], &'static [(u8, u32)]) {
     match kind {

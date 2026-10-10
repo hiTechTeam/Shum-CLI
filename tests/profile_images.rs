@@ -62,3 +62,96 @@ fn warp_profile_modal_keeps_its_own_images_and_hides_chat_images() {
         .iter()
         .all(|c| !c.symbol().contains("\x1b_Ga=T,")));
 }
+
+#[test]
+fn reaction_picker_keeps_uncovered_avatars_and_restores_them_after_closing() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{buffer::Buffer, layout::Rect};
+    use shum_cli::ui::handle_key;
+    fn positions(buffer: &Buffer) -> Vec<Rect> {
+        buffer
+            .content
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| {
+                let symbol = c.symbol();
+                if !symbol.contains("\x1b_Ga=T,") {
+                    return None;
+                }
+                let dimension = |key: &str| -> u16 {
+                    symbol
+                        .split_once(key)
+                        .unwrap()
+                        .1
+                        .split(',')
+                        .next()
+                        .unwrap()
+                        .parse()
+                        .unwrap()
+                };
+                Some(Rect::new(
+                    i as u16 % buffer.area.width,
+                    i as u16 / buffer.area.width,
+                    dimension("c="),
+                    dimension("r="),
+                ))
+            })
+            .collect()
+    }
+    let display = Display::for_terminal("WarpTerminal", "xterm-256color", "", false, false);
+    let mut picker = Picker::halfblocks();
+    picker.set_protocol_type(display.images);
+    let mut pictures = Pictures::with_display(picker, display);
+    let snapshot = json!({"profile":{"ownerId":"own"},"contacts":[
+        {"id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","phase":"accepted","card":{"name":"Peer","avatarSeed":123}},
+        {"id":"other","phase":"accepted","card":{"name":"Other","avatarSeed":42}}
+    ],"messages":[{"id":"one","contactID":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","text":"Hello"}]});
+    for (width, height) in [(160, 50), (100, 24)] {
+        let mut view =
+            View::chat("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+            .unwrap();
+        let before = positions(terminal.backend().buffer());
+        assert_eq!(before.len(), 3);
+        handle_key(
+            &mut view,
+            &snapshot,
+            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+        let popup = Rect::new((width - 72) / 2, (height - 22) / 2, 72, 22);
+        let outside: Vec<_> = before
+            .iter()
+            .copied()
+            .filter(|r| r.intersection(popup).is_empty())
+            .collect();
+        assert!(!outside.is_empty());
+        if width == 100 {
+            assert!(outside.len() < before.len());
+        }
+        for code in [KeyCode::Up, KeyCode::Enter, KeyCode::Down, KeyCode::Esc] {
+            handle_key(
+                &mut view,
+                &snapshot,
+                KeyEvent::new(code, KeyModifiers::NONE),
+            )
+            .unwrap();
+            terminal
+                .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+                .unwrap();
+            assert_eq!(positions(terminal.backend().buffer()), outside);
+        }
+        handle_key(
+            &mut view,
+            &snapshot,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        )
+        .unwrap();
+        terminal
+            .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+            .unwrap();
+        assert_eq!(positions(terminal.backend().buffer()), before);
+    }
+}

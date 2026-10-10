@@ -1,7 +1,9 @@
 mod history_reactions;
+mod languages;
 pub(crate) mod reaction_art;
 mod reactions;
 
+use crate::i18n::t;
 use crate::{
     display::{ACCENT as GREEN, LOGO, LOGO_COLOR, MUTED},
     ipc,
@@ -41,6 +43,7 @@ pub struct View {
     pub composing: bool,
     pub command_mode: bool,
     pub help: bool,
+    info_scroll: u16,
     pub info: Option<(String, String)>,
     pub profile_details: HashMap<String, Value>,
     pub qr: Option<String>,
@@ -48,6 +51,7 @@ pub struct View {
     pub profile_selected: usize,
     form: Option<Form>,
     reactions: Option<reactions::Picker>,
+    languages: Option<usize>,
     chat_rows: Vec<(Rect, String)>,
 }
 impl View {
@@ -71,6 +75,7 @@ pub struct Pictures {
     scene: Option<u64>,
     direct: Option<crate::graphics::DirectImages>,
     hide_direct: bool,
+    popup_cover: Option<Rect>,
 }
 impl Pictures {
     pub fn new(picker: Picker) -> Self {
@@ -94,6 +99,7 @@ impl Pictures {
             scene: None,
             direct: None,
             hide_direct: false,
+            popup_cover: None,
         }
     }
     pub(crate) fn cell_avatars(&self) -> bool {
@@ -183,7 +189,11 @@ impl Pictures {
             self.cache.clear();
         }
         if let Some(direct) = &mut self.direct {
-            if !self.hide_direct {
+            if !self.hide_direct
+                && !self
+                    .popup_cover
+                    .is_some_and(|popup| !popup.intersection(area).is_empty())
+            {
                 direct.draw(frame, seed, area);
             }
             return;
@@ -232,7 +242,7 @@ fn contacts(snapshot: &Value, tab: usize) -> Vec<&Value> {
         .flatten()
         .filter(|c| match tab {
             1 => c["nearby"] == true,
-            2 => c["phase"] == "incomingPending",
+            2 => crate::invitations::is_invitation(c),
             3 => c["unread"].as_u64().unwrap_or(0) > 0,
             _ => true,
         })
@@ -286,8 +296,8 @@ fn ticks(status: &str, ascii: bool) -> &str {
         ("forwarding", true) => "[relay]",
         ("queued", false) => "…",
         ("queued", true) => "[queued]",
-        ("expired", _) => "[истекло]",
-        ("cancelled", _) => "[отменено]",
+        ("expired", _) => t("[истекло]"),
+        ("cancelled", _) => t("[отменено]"),
         _ => "",
     }
 }
@@ -303,10 +313,15 @@ pub fn draw(
         || view.qr.is_some()
         || view.info.is_some()
         || view.profiles.is_some()
-        || view.form.is_some()
-        || view.reactions.is_some();
+        || view.form.is_some();
+    pictures.popup_cover = view
+        .reactions
+        .as_ref()
+        .map(|_| reactions::popup_area(frame.area()))
+        .or_else(|| view.languages.map(|_| languages::popup_area(frame.area())));
     draw_content(frame, snapshot, view, pictures, ascii);
     pictures.hide_direct = false;
+    pictures.popup_cover = None;
     pictures.colors.apply(frame.buffer_mut(), ascii);
 }
 fn draw_content(
@@ -319,7 +334,7 @@ fn draw_content(
     let area = frame.area();
     if area.width < 35 || area.height < 12 {
         frame.render_widget(
-            Paragraph::new("Увеличьте окно терминала (от 35×12). Ctrl+C: выход"),
+            Paragraph::new(t("Увеличьте окно терминала (от 35×12). Ctrl+C: выход")),
             area,
         );
         return;
@@ -344,10 +359,14 @@ fn draw_content(
     let all = contacts(snapshot, 0);
     let nearby = all.iter().filter(|c| c["nearby"] == true).count();
     frame.render_widget(
-        Paragraph::new(format!(
+        Paragraph::new(crate::i18n::format(
             " Shum  {}   релеев {relay}   рядом {nearby}   {}",
-            safe(text(&snapshot["card"]["name"])),
-            chrono::Local::now().format("%H:%M")
+            &[
+                ("0", safe(text(&snapshot["card"]["name"])).to_string()),
+                ("relay", format!("{}", relay)),
+                ("nearby", format!("{}", nearby)),
+                ("1", format!("{}", chrono::Local::now().format("%H:%M"))),
+            ],
         ))
         .style(style),
         vertical[0],
@@ -358,7 +377,7 @@ fn draw_content(
         contacts(snapshot, 2).len(),
         contacts(snapshot, 3).len(),
     ];
-    let tabs = ["Все", "Рядом", "Приглашения", "Непрочитанные"]
+    let tabs = [t("Все"), t("Рядом"), t("Приглашения"), t("Непрочитанные")]
         .iter()
         .enumerate()
         .map(|(i, label)| {
@@ -404,9 +423,9 @@ fn draw_content(
         };
         let block = border(
             if view.tab == 1 {
-                "Рядом"
+                t("Рядом")
             } else {
-                "Чаты"
+                t("Чаты")
             },
             ascii,
         );
@@ -471,9 +490,11 @@ fn draw_content(
                 .rev()
                 .find(|m| m["contactID"] == c["id"]);
             let preview = if c["phase"] == "incomingPending" {
-                "Приглашение: Enter".into()
+                t("Приглашение: Enter").into()
+            } else if c["phase"] == "declinedLocally" {
+                t("Вы отклонили приглашение.").into()
             } else if c["typing"] == true {
-                "печатает…".into()
+                t("печатает…").into()
             } else if view.tab == 1 {
                 nearby_label(c)
             } else {
@@ -521,29 +542,29 @@ fn draw_content(
         lines.extend([
             Line::from(""),
             Line::from(if full_empty && view.tab == 1 {
-                "Пока никого рядом"
+                t("Пока никого рядом")
             } else if full_empty {
-                "Пока нет чатов"
+                t("Пока нет чатов")
             } else {
-                "Выберите чат слева"
+                t("Выберите чат слева")
             }),
             Line::from(Span::styled(
                 if full_empty && view.tab == 1 {
-                    "Откройте Shum на устройстве рядом"
+                    t("Откройте Shum на устройстве рядом")
                 } else if full_empty {
-                    "Позовите кого-нибудь, и переписка появится здесь"
+                    t("Позовите кого-нибудь, и переписка появится здесь")
                 } else {
-                    "Enter открыть · ↑↓ выбрать"
+                    t("Enter открыть · ↑↓ выбрать")
                 },
                 Style::default().fg(muted),
             )),
             Line::from(""),
-            Line::from("i     показать мой QR-код"),
-            Line::from("a     добавить по ссылке или QR"),
-            Line::from("^n    кто рядом по Bluetooth"),
+            Line::from(t("i     показать мой QR-код")),
+            Line::from(t("a     добавить по ссылке или QR")),
+            Line::from(t("^n    кто рядом по Bluetooth")),
             Line::from(""),
             Line::from(Span::styled(
-                "или в терминале: shum qr · shum add <ссылка>",
+                t("или в терминале: shum qr · shum add <ссылка>"),
                 Style::default().fg(muted),
             )),
         ]);
@@ -561,7 +582,7 @@ fn draw_content(
         let card = find_contact(snapshot, id).ok();
         let title = card
             .map(|c| safe(text(&c["card"]["name"])))
-            .unwrap_or_else(|| "Чат".into());
+            .unwrap_or_else(|| t("Чат").into());
         let parts = Layout::vertical([Constraint::Min(3), Constraint::Length(3)]).split(chat_area);
         let block = border("", ascii);
         let inner = block.inner(parts[0]);
@@ -595,15 +616,13 @@ fn draw_content(
             }
             let x = if show_avatar { avatar_width + 1 } else { 0 };
             let phase = if card["typing"] == true {
-                "печатает…"
-            } else if card["phase"] == "incomingPending" {
-                "/accept принять · /decline отклонить"
+                t("печатает…")
             } else if card["phase"] != "accepted" {
-                "/invite пригласить"
+                crate::invitations::hint(text(&card["phase"]))
             } else if card["online"] == true {
-                "в чате"
+                t("в чате")
             } else {
-                "сквозное шифрование"
+                t("сквозное шифрование")
             };
             frame.render_widget(
                 Paragraph::new(vec![
@@ -636,12 +655,24 @@ fn draw_content(
         let mut lines = Vec::new();
         let mut reaction_icons = Vec::new();
         let mut visual_rows = 0;
-        for m in snapshot["messages"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|m| m["contactID"] == *id)
-        {
+        for m in crate::invitations::timeline(snapshot, id) {
+            if m["kind"].is_string() {
+                let line = Line::from(Span::styled(
+                    format!(
+                        "{}  {}",
+                        crate::invitations::label(m),
+                        stamp(&m["timestamp"])
+                    ),
+                    Style::default().fg(muted),
+                ));
+                visual_rows += Paragraph::new(line.clone())
+                    .wrap(Wrap { trim: false })
+                    .line_count(history.width)
+                    + 1;
+                lines.push(line);
+                lines.push(Line::from(""));
+                continue;
+            }
             let message_start = lines.len();
             let own = m["outgoing"] == true;
             if let Some(reply) = m["reply"].as_object() {
@@ -697,23 +728,38 @@ fn draw_content(
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
-        if !pictures.hide_direct {
+        // The picker covers only its own rectangle. Keep chat reactions visible
+        // around it; inline PNGs cannot rely on a later text Clear for occlusion.
+        let hide_reactions = view.help
+            || view.qr.is_some()
+            || view.info.is_some()
+            || view.profiles.is_some()
+            || view.form.is_some();
+        let reaction_popup = view
+            .reactions
+            .as_ref()
+            .map(|_| reactions::popup_area(frame.area()))
+            .or_else(|| view.languages.map(|_| languages::popup_area(frame.area())));
+        if !hide_reactions {
             if let Some(direct) = &mut pictures.direct {
                 for icon in reaction_icons {
+                    use history_reactions::{PNG_HEIGHT, PNG_WIDTH};
                     // Never allow a PNG to cross the history border or input.
                     if icon.row >= usize::from(offset)
-                        && icon.row + 2 <= usize::from(offset) + usize::from(history.height)
+                        && icon.row + usize::from(PNG_HEIGHT)
+                            <= usize::from(offset) + usize::from(history.height)
                     {
-                        direct.reaction(
-                            frame,
-                            icon.index,
-                            Rect::new(
-                                history.x + icon.x,
-                                history.y + (icon.row - usize::from(offset)) as u16,
-                                4,
-                                2,
-                            ),
+                        let area = Rect::new(
+                            history.x + icon.x,
+                            history.y + (icon.row - usize::from(offset)) as u16,
+                            PNG_WIDTH,
+                            PNG_HEIGHT,
                         );
+                        if reaction_popup.is_some_and(|popup| !popup.intersection(area).is_empty())
+                        {
+                            continue;
+                        }
+                        direct.reaction(frame, icon.index, area);
                     }
                 }
             }
@@ -726,9 +772,9 @@ fn draw_content(
         .block(
             border(
                 if view.composing {
-                    "Сообщение · Enter отправить · Esc к списку"
+                    t("Сообщение · Enter отправить · Esc к списку")
                 } else {
-                    "Сообщение · Tab ввод"
+                    t("Сообщение · Tab ввод")
                 },
                 ascii,
             )
@@ -752,6 +798,8 @@ fn draw_content(
             && view.profiles.is_none()
             && view.qr.is_none()
             && view.form.is_none()
+            && view.languages.is_none()
+            && view.reactions.is_none()
         {
             frame.set_cursor_position((
                 parts[1].x + 1 + input_width.min(width) as u16,
@@ -767,10 +815,17 @@ fn draw_content(
         frame.render_widget(
             Paragraph::new(view.input.as_str())
                 .scroll((0, input_width.saturating_sub(width) as u16))
-                .block(border("Команда · /help список · Esc отменить", ascii).border_style(style)),
+                .block(
+                    border(t("Команда · /help список · Esc отменить"), ascii).border_style(style),
+                ),
             footer_parts[0],
         );
-        if view.form.is_none() && view.qr.is_none() && !view.help {
+        if view.form.is_none()
+            && view.qr.is_none()
+            && !view.help
+            && view.languages.is_none()
+            && view.reactions.is_none()
+        {
             frame.set_cursor_position((
                 footer_parts[0].x + 1 + input_width.min(width) as u16,
                 footer_parts[0].y + 1,
@@ -789,13 +844,13 @@ fn draw_content(
         &view.status
     };
     let hint = if view.composing || view.command_mode {
-        "Enter отправить · Esc к списку · ^P профили · ^Q выход"
+        t("Enter отправить · ^R реакция · Esc к списку · ^P профили · ^Q выход")
     } else if area.width < 60 {
-        "i QR · a добавить · ^P профили · q выход"
+        t("i QR · a добавить · ^P профили · q выход")
     } else if full_empty {
-        "i мой QR · a добавить · ^N рядом · ^P профили · / команды · q выход"
+        t("i мой QR · a добавить · ^N рядом · ^P профили · / команды · q выход")
     } else {
-        "↑↓ чаты · Enter открыть · Tab ввод · / команды · ^P профили · q выход"
+        t("↑↓ чаты · Enter открыть · Tab ввод · / команды · ^P профили · q выход")
     };
     frame.render_widget(
         Paragraph::new(vec![
@@ -829,7 +884,7 @@ fn draw_content(
             ((profiles.len() as u16 + 1) * stride + 5).min(area.height),
         );
         frame.render_widget(Clear, popup);
-        let block = border(" Профили ", ascii).border_style(style);
+        let block = border(t(" Профили "), ascii).border_style(style);
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
         let visible = usize::from(inner.height.saturating_sub(3) / stride).max(1);
@@ -868,22 +923,28 @@ fn draw_content(
                     if selected && ascii { "> " } else { "" },
                     safe(&p.name),
                     if p.id == snapshot["profile"]["id"] {
-                        "  текущий".into()
+                        t("  текущий").into()
                     } else {
                         detail
                             .map(|d| {
-                                format!(
+                                crate::i18n::format(
                                     "  {} чатов",
-                                    d["chatCount"]
-                                        .as_u64()
-                                        .unwrap_or_else(|| contacts(d, 0).len() as u64)
+                                    &[(
+                                        "0",
+                                        format!(
+                                            "{}",
+                                            d["chatCount"]
+                                                .as_u64()
+                                                .unwrap_or_else(|| contacts(d, 0).len() as u64)
+                                        ),
+                                    )],
                                 )
                             })
                             .unwrap_or_default()
                     }
                 )
             } else {
-                "+ Создать новый профиль".into()
+                t("+ Создать новый профиль").into()
             };
             let inset = if ascii || pictures.cell_avatars() {
                 0
@@ -909,7 +970,7 @@ fn draw_content(
         }
         pictures.hide_direct = hidden_behind_modal;
         frame.render_widget(
-            Paragraph::new("Enter выбрать · d удалить · Esc закрыть")
+            Paragraph::new(t("Enter выбрать · d удалить · Esc закрыть"))
                 .style(Style::default().fg(muted)),
             Rect::new(
                 inner.x + 1,
@@ -920,16 +981,24 @@ fn draw_content(
         );
     }
     if view.help || view.info.is_some() {
+        let help = help_text();
         let (title, body) = view
             .info
             .as_ref()
             .map(|(t, b)| (t.as_str(), b.as_str()))
-            .unwrap_or(("Команды в Shum", HELP));
+            .unwrap_or((t("Команды в Shum"), help.as_str()));
         let popup = centered(area, 76, 26);
         frame.render_widget(Clear, popup);
+        let paragraph = Paragraph::new(body).wrap(Wrap { trim: false });
+        view.info_scroll = view.info_scroll.min(
+            paragraph
+                .line_count(popup.width.saturating_sub(2))
+                .saturating_sub(usize::from(popup.height.saturating_sub(2)))
+                .min(u16::MAX as usize) as u16,
+        );
         frame.render_widget(
-            Paragraph::new(body)
-                .wrap(Wrap { trim: false })
+            paragraph
+                .scroll((view.info_scroll, 0))
                 .block(border(title, ascii).border_style(style)),
             popup,
         );
@@ -939,11 +1008,12 @@ fn draw_content(
             let popup = centered(area, 76, 8);
             frame.render_widget(Clear, popup);
             frame.render_widget(
-                Paragraph::new(format!(
-                    "{link}\n\nQR в режиме ASCII: shum qr --ascii\nEsc закрыть"
+                Paragraph::new(crate::i18n::format(
+                    "{link}\n\nQR в режиме ASCII: shum qr --ascii\nEsc закрыть",
+                    &[("link", link.to_string())],
                 ))
                 .wrap(Wrap { trim: false })
-                .block(border("Моё приглашение", true)),
+                .block(border(t("Моё приглашение"), true)),
                 popup,
             );
         } else if let Ok(code) = crate::terminal::qr(link, false) {
@@ -952,7 +1022,7 @@ fn draw_content(
             let popup = centered(area, width + 4, height + 4);
             frame.render_widget(Clear, popup);
             frame.render_widget(
-                border("Мой QR · Esc закрыть", ascii).border_style(style),
+                border(t("Мой QR · Esc закрыть"), ascii).border_style(style),
                 popup,
             );
             if popup.width >= width + 2 && popup.height >= height + 2 {
@@ -962,7 +1032,7 @@ fn draw_content(
                 );
             } else {
                 frame.render_widget(
-                    Paragraph::new("Увеличьте окно для QR или выполните shum qr")
+                    Paragraph::new(t("Увеличьте окно для QR или выполните shum qr"))
                         .wrap(Wrap { trim: false }),
                     border("", ascii).inner(popup),
                 );
@@ -970,22 +1040,29 @@ fn draw_content(
         }
     }
     reactions::draw(frame, snapshot, view, ascii);
+    languages::draw(frame, view, ascii);
     if let Some(form) = &view.form {
         let title = match form {
-            Form::DeleteProfile { .. } => "Введите имя удаляемого профиля",
-            Form::ClearChat(_) => "Очистить чат здесь? Введите да",
+            Form::DeleteProfile { .. } => t("Введите имя удаляемого профиля"),
+            Form::ClearChat(_) => t("Очистить чат здесь? Введите да"),
         };
         let popup = centered(area, 56, 7);
         frame.render_widget(Clear, popup);
         frame.render_widget(
-            Paragraph::new(format!(
+            Paragraph::new(crate::i18n::format(
                 "{}{}\n{}\nEnter подтвердить · Esc отменить",
-                match form {
-                    Form::DeleteProfile { id, name } => format!("{}\n{}\n", safe(name), id),
-                    Form::ClearChat(_) => String::new(),
-                },
-                safe(&view.input),
-                safe(&view.status)
+                &[
+                    (
+                        "0",
+                        (match form {
+                            Form::DeleteProfile { id, name } => format!("{}\n{}\n", safe(name), id),
+                            Form::ClearChat(_) => String::new(),
+                        })
+                        .to_string(),
+                    ),
+                    ("1", safe(&view.input).to_string()),
+                    ("2", safe(&view.status).to_string()),
+                ],
             ))
             .block(border(title, ascii).border_style(style)),
             popup,
@@ -1030,6 +1107,8 @@ fn shortcut(code: KeyCode) -> KeyCode {
             'з' => 'p',
             'т' => 'n',
             'в' => 'd',
+            'к' => 'r',
+            'д' => 'l',
             _ => c,
         }),
         _ => code,
@@ -1047,6 +1126,8 @@ pub enum Action {
     Open(String),
     Tab(usize),
     Help,
+    Language(String),
+    Languages,
     Info(String, String),
 }
 fn open_contact(view: &mut View, id: String) {
@@ -1064,17 +1145,55 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
     if is_quit_key(key) {
         return Ok(Action::Quit);
     }
+    if view.languages.is_some() {
+        return Ok(languages::handle(view, key));
+    }
     if view.reactions.is_some() {
         return reactions::handle(view, snapshot, key);
     }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return Ok(match shortcut(key.code) {
+            KeyCode::Char('r')
+                if view.qr.is_none()
+                    && !view.help
+                    && view.info.is_none()
+                    && view.form.is_none()
+                    && view.profiles.is_none() =>
+            {
+                let draft = view.input.clone();
+                let command_mode = view.command_mode;
+                reactions::open(view, snapshot)?;
+                view.input = draft;
+                view.command_mode = command_mode;
+                Action::None
+            }
+            KeyCode::Char('l')
+                if view.qr.is_none()
+                    && !view.help
+                    && view.info.is_none()
+                    && view.form.is_none()
+                    && view.profiles.is_none() =>
+            {
+                languages::open(view, false);
+                Action::None
+            }
             KeyCode::Char('p') => Action::Profiles,
             KeyCode::Char('n') => Action::Tab(1),
             _ => Action::None,
         });
     }
     if view.qr.is_some() || view.help || view.info.is_some() {
+        if view.help || view.info.is_some() {
+            match key.code {
+                KeyCode::Down => view.info_scroll = view.info_scroll.saturating_add(1),
+                KeyCode::Up => view.info_scroll = view.info_scroll.saturating_sub(1),
+                KeyCode::PageDown => view.info_scroll = view.info_scroll.saturating_add(10),
+                KeyCode::PageUp => view.info_scroll = view.info_scroll.saturating_sub(10),
+                KeyCode::Home => view.info_scroll = 0,
+                KeyCode::End => view.info_scroll = u16::MAX,
+                _ => {}
+            }
+        }
         if matches!(
             shortcut(key.code),
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')
@@ -1082,6 +1201,7 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
             view.qr = None;
             view.help = false;
             view.info = None;
+            view.info_scroll = 0;
         }
         return Ok(Action::None);
     }
@@ -1094,13 +1214,19 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
             KeyCode::Enter => match form {
                 Form::DeleteProfile { id, name } => {
                     if view.input != *name {
-                        bail!("Введите точное имя: {}", safe(name));
+                        bail!(
+                            "{}",
+                            crate::i18n::format(
+                                "Введите точное имя: {}",
+                                &[("0", safe(name).to_string())]
+                            )
+                        );
                     }
                     return Ok(Action::Delete(id.clone()));
                 }
                 Form::ClearChat(id) => {
-                    if view.input != "да" {
-                        bail!("Для очистки введите да");
+                    if view.input != t("да") {
+                        bail!("{}", t("Для очистки введите да"));
                     }
                     return Ok(Action::Request(Request::Clear {
                         contact: id.clone(),
@@ -1175,7 +1301,12 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
                 reactions::open(view, snapshot)?;
                 return Ok(Action::None);
             }
-            return parse_command(&view.input, view.opened.as_deref(), snapshot);
+            let action = parse_command(&view.input, view.opened.as_deref(), snapshot)?;
+            if matches!(action, Action::Languages) {
+                languages::open(view, true);
+                return Ok(Action::None);
+            }
+            return Ok(action);
         }
         KeyCode::Enter => {
             if let Some(c) = contacts(snapshot, view.tab).get(view.selected) {
@@ -1219,16 +1350,16 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
 fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result<Action> {
     if !input.starts_with('/') {
         return Ok(Action::Request(Request::Send {
-            contact: current.context("Сначала выберите чат")?.into(),
+            contact: current.context(t("Сначала выберите чат"))?.into(),
             text: input.into(),
         }));
     }
-    let words = shlex::split(input).context("Незакрытые кавычки")?;
+    let words = shlex::split(input).context(t("Незакрытые кавычки"))?;
     let args = words.iter().map(String::as_str).collect::<Vec<_>>();
     let contact = |arg: Option<&&str>| -> Result<String> {
         arg.copied()
             .or(current)
-            .context("Укажите ID или откройте чат")
+            .context(t("Укажите ID или откройте чат"))
             .and_then(|id| {
                 crate::contact::validate(id)?;
                 Ok(id.to_owned())
@@ -1250,20 +1381,22 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/block",who]=>Request::Block{contact:contact(Some(who))?,blocked:true},
         ["/block",who,"--undo"]=>Request::Block{contact:contact(Some(who))?,blocked:false},
         ["/cancel",message]=>Request::Cancel{message:(*message).into()},
-        ["/react",message,reaction]=>Request::Reaction{message:(*message).into(),reaction:serde_json::from_value(Value::String((*reaction).into())).context("Реакция: heart like dislike laugh fire coffin hundred horror")?},
+        ["/react",message,reaction]=>Request::Reaction{message:(*message).into(),reaction:serde_json::from_value(Value::String((*reaction).into())).context(t("Реакция: heart like dislike laugh fire coffin hundred horror"))?},
         ["/profile","name",name @ ..] if !name.is_empty()=>Request::Profile{name:Some(name.join(" ")),bio:None,seed:None},
         ["/profile","bio",bio @ ..]=>Request::Profile{name:None,bio:Some(bio.join(" ")),seed:None},
         ["/profile","avatar","--random"]=>{let mut bytes=[0;8];getrandom::fill(&mut bytes)?;Request::Profile{name:None,bio:None,seed:Some(u64::from_le_bytes(bytes))}},
-        ["/profile","avatar","--seed",seed]=>Request::Profile{name:None,bio:None,seed:Some(seed.parse().context("Семя должно быть целым числом")?)},
-        ["/profile"]=>return Ok(Action::Info("Профиль".into(),format!("{}\n{}\n\nShum ID: {}\nСетевой ID: {}\n\n/profile name <имя>\n/profile bio <текст>\n/profile avatar --random\nCtrl+P: выбрать или создать профиль",safe(text(&snapshot["card"]["name"])),safe(text(&snapshot["card"]["bio"])),text(&snapshot["profile"]["ownerId"]),text(&snapshot["card"]["nostrKey"])))),
+        ["/profile","avatar","--seed",seed]=>Request::Profile{name:None,bio:None,seed:Some(seed.parse().context(t("Семя должно быть целым числом"))?)},
+        ["/language",code]=>return Ok(Action::Language((*code).into())),
+        ["/language"]=>return Ok(Action::Languages),
+        ["/profile"]=>return Ok(Action::Info(t("Профиль").into(),crate::i18n::format("{}\n{}\n\nShum ID: {}\nСетевой ID: {}\n\n/profile name <имя>\n/profile bio <текст>\n/profile avatar --random\nCtrl+P: выбрать или создать профиль", &[("0", safe(text(&snapshot["card"]["name"])).to_string()), ("1", safe(text(&snapshot["card"]["bio"])).to_string()), ("2", text(&snapshot["profile"]["ownerId"]).to_string()), ("3", text(&snapshot["card"]["nostrKey"]).to_string())]))),
         ["/profile","list"]=>return Ok(Action::Profiles),
         ["/chats"|"/contacts"]=>return Ok(Action::Tab(0)),
         ["/chats","--nearby"]|["/nearby"]=>return Ok(Action::Tab(1)),
         ["/chats","--invites"]=>return Ok(Action::Tab(2)),
         ["/chats","--unread"]=>return Ok(Action::Tab(3)),
-        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),format!("Версия {} · протокол v1\nПрофиль: {}\nРелеев подключено: {}\n{}\nPush API: {}\n{}",env!("CARGO_PKG_VERSION"),safe(text(&snapshot["card"]["name"])),snapshot["relays"].as_array().map_or(0,Vec::len),bluetooth_status(snapshot),crate::terminal::push_status(snapshot),safe(text(&snapshot["error"]))))),
-        ["/keys","verify",who]=>{let c:shum_core::card::Card=serde_json::from_value(find_contact(snapshot,who)?["card"].clone())?;return Ok(Action::Info("Сверка ключей".into(),format!("{}\n\nОтпечаток как в iPhone: {}\n\nShum ID: {}",safe(&c.name),crate::terminal::fingerprint(&c),c.id())));},
-        _=>bail!("Команда или аргументы не распознаны. /help: список и примеры"),
+        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),crate::i18n::format("Версия {} · протокол v1\nПрофиль: {}\nРелеев подключено: {}\n{}\nPush API: {}\n{}", &[("0", env!("CARGO_PKG_VERSION").to_string()), ("1", safe(text(&snapshot["card"]["name"])).to_string()), ("2", format!("{}", snapshot["relays"].as_array().map_or(0,Vec::len))), ("3", bluetooth_status(snapshot).to_string()), ("4", crate::terminal::push_status(snapshot).to_string()), ("5", safe(text(&snapshot["error"])).to_string())]))),
+        ["/keys","verify",who]=>{let c:shum_core::card::Card=serde_json::from_value(find_contact(snapshot,who)?["card"].clone())?;return Ok(Action::Info(t("Сверка ключей").into(),crate::i18n::format("{}\n\nОтпечаток как в iPhone: {}\n\nShum ID: {}", &[("0", safe(&c.name).to_string()), ("1", crate::terminal::fingerprint(&c).to_string()), ("2", c.id().to_string())])));},
+        _=>bail!("{}", t("Команда или аргументы не распознаны. /help: список и примеры")),
     };
     Ok(Action::Request(req))
 }
@@ -1284,6 +1417,7 @@ fn invitation(snapshot: &Value, size: ratatui::layout::Size) -> Result<String> {
 }
 struct Pending {
     task: tokio::task::JoinHandle<Result<Option<String>>>,
+    clear_input: bool,
     input: String,
 }
 impl Drop for Pending {
@@ -1451,7 +1585,7 @@ async fn run_loop(
             if let Some(value) = updates.borrow_and_update().clone() {
                 *snapshot = value;
             } else {
-                view.status = "Служба не отвечает. Ctrl+C или F10: выход".into();
+                view.status = t("Служба не отвечает. Ctrl+C или F10: выход").into();
             }
         }
         if pending.as_ref().is_some_and(|job| job.task.is_finished()) {
@@ -1468,14 +1602,14 @@ async fn run_loop(
                         (worker, updates, activity) = feed(root, profile);
                         *snapshot = Value::Null;
                     }
-                    if view.input == job.input {
+                    if job.clear_input && view.input == job.input {
                         view.input.clear();
                         view.command_mode = false;
                     }
                     view.form = None;
                     view.profiles = None;
                     view.scroll = 0;
-                    view.status = "Готово".into();
+                    view.status = t("Готово").into();
                 }
                 Err(error) => view.status = error.to_string(),
             }
@@ -1493,6 +1627,7 @@ async fn run_loop(
                     // Reaction PNG placements move with wrapped message history.
                     snapshot["messages"].to_string(),
                     snapshot["reactions"].to_string(),
+                    snapshot["events"].to_string(),
                     snapshot["card"]["name"].to_string(),
                 ),
                 (
@@ -1502,6 +1637,8 @@ async fn run_loop(
                     view.profiles.is_some(),
                     view.form.is_some(),
                     view.reactions.is_some(),
+                    view.languages.is_some(),
+                    crate::i18n::current(),
                 ),
                 contacts(snapshot, view.tab)
                     .iter()
@@ -1537,6 +1674,7 @@ async fn run_loop(
                 Event::Key(key) => handle_key(view, snapshot, key),
                 Event::Paste(value) => {
                     if view.reactions.is_none()
+                        && view.languages.is_none()
                         && (view.composing || view.command_mode || view.form.is_some())
                     {
                         let limit = if view.form.is_some() { 128 } else { 4096 };
@@ -1551,6 +1689,7 @@ async fn run_loop(
                 }
                 Event::Mouse(mouse) => {
                     if view.reactions.is_none()
+                        && view.languages.is_none()
                         && view.profiles.is_none()
                         && view.form.is_none()
                         && view.qr.is_none()
@@ -1596,6 +1735,17 @@ async fn run_loop(
                 Ok(link) => {
                     view.qr = Some(link);
                     if view.command_mode {
+                        view.input.clear();
+                        view.command_mode = false;
+                    }
+                }
+                Err(error) => view.status = error.to_string(),
+            },
+            Action::Languages => languages::open(view, true),
+            Action::Language(code) => match crate::i18n::save(&code, root) {
+                Ok(()) => {
+                    view.status = format!("{}: {}", t("Язык интерфейса"), crate::i18n::current());
+                    if view.languages.take().is_none() {
                         view.input.clear();
                         view.command_mode = false;
                     }
@@ -1659,11 +1809,12 @@ async fn run_loop(
             }
             action => {
                 if pending.is_some() {
-                    view.status = "Команда выполняется. Можно выйти: Ctrl+C / F10".into();
+                    view.status = t("Команда выполняется. Можно выйти: Ctrl+C / F10").into();
                     continue;
                 }
                 let root = root.to_owned();
                 let current = profile.clone();
+                let clear_input = !matches!(&action, Action::Request(Request::Reaction { .. }));
                 let task = tokio::spawn(async move {
                     match action {
                         Action::Request(request) => {
@@ -1699,9 +1850,10 @@ async fn run_loop(
                 });
                 pending = Some(Pending {
                     task,
+                    clear_input,
                     input: view.input.clone(),
                 });
-                view.status = "Выполняется… Ctrl+C: выход".into();
+                view.status = t("Выполняется… Ctrl+C: выход").into();
             }
         }
         let next = Activity {
@@ -1724,32 +1876,67 @@ async fn run_loop(
     }
 }
 
-const HELP: &str = "Клавиши работают в английской и русской раскладке.
-
-↑↓ / j k   выбрать чат       Enter открыть / отправить
-Esc        из ввода к списку Tab   сменить панель
-i          мой QR           a     добавить контакт
-Ctrl+P     профили          1–4   фильтр чатов
-q          выход из списка  Ctrl+C / Ctrl+Q / F10 из любого окна
-
-/add <ссылка>               /add --image \"/путь/qr.png\"
-/qr                        мой QR
-/invite [ID]               пригласить собеседника чата или по ID
-/accept [ID]              /decline [ID]
-/open <ID>                /send <ID> \"текст\"
-/read [ID]                /clear [ID] с подтверждением
-/react                     выбрать сообщение и пиксельную реакцию
-/react <ID> heart|like|dislike|laugh|fire|coffin|hundred|horror
-/cancel <ID>               /block <ID> [--undo]
-/profile                   /profile list
-/profile name <имя>        /profile bio <текст>
-/profile avatar --random   /profile avatar --seed <число>
-/keys verify <ID>         /status
-/chats [--invites|--unread|--nearby]       /contacts
-/quit или /exit            выход
-
-Без ID команды invite/accept/decline/read/clear действуют в открытом чате.
-Имена только для отображения. Esc закрыть";
+fn help_text() -> String {
+    let rows = [
+        ("↑↓ / j k · Enter · Tab", t("Чаты")),
+        ("Ctrl+P", t(" Профили ").trim()),
+        ("Ctrl+L / /language", t("Язык интерфейса")),
+        ("Ctrl+R / /react", t("Выберите сообщение")),
+        ("i / /qr", t("Мой QR · Esc закрыть")),
+        (
+            "a / /add <link> / /add --image <png>",
+            t("Добавить контакт по ссылке или QR"),
+        ),
+        ("Ctrl+N / /chats --nearby", t("Рядом")),
+        (
+            "/invite [ID]",
+            t("Пригласить по Shum ID или полному сетевому ID"),
+        ),
+        ("/accept [ID]", t("Принять приглашение в чат")),
+        ("/decline [ID]", t("Отклонить приглашение")),
+        (
+            "/open <ID> / /send <ID> <text>",
+            t("Отправить сообщение принятому контакту"),
+        ),
+        ("/read [ID]", t("Отметить чат прочитанным")),
+        ("/clear [ID]", t("Очистить чат на этом компьютере")),
+        (
+            "/react <ID> heart|like|dislike|laugh|fire|coffin|hundred|horror",
+            "",
+        ),
+        ("/cancel <ID>", t("Отменить отправку сообщения")),
+        (
+            "/block <ID> [--undo]",
+            t("Заблокировать контакт; --undo разблокировать"),
+        ),
+        ("/profile / /profile list", t("Профиль, имя и аватар")),
+        ("/profile name <name> / /profile bio <text>", ""),
+        ("/profile avatar --random / --seed <number>", ""),
+        ("/keys verify <ID>", t("Сверить отпечатки ключей")),
+        ("/status", t("Подключения и состояние службы")),
+        (
+            "1–4 / /chats [--invites|--unread|--nearby]",
+            t("Чаты и фильтры"),
+        ),
+        (
+            "/language [system|ru|en|es|zh-Hans|hi|fr|ja|pt-BR|ar|ko]",
+            t("Язык интерфейса"),
+        ),
+        ("/contacts", t("Список контактов и их Shum ID")),
+        ("q / /quit / /exit / Ctrl+Q / F10", t("Ctrl+C выход")),
+        ("Esc", t("Готово")),
+    ];
+    rows.into_iter()
+        .map(|(keys, label)| {
+            if label.is_empty() {
+                keys.to_owned()
+            } else {
+                format!("{keys}  {label}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Read presentation metadata without starting inactive profiles or exposing their messages.
 pub async fn profile_preview(root: &Path, id: &str) -> Option<Value> {
@@ -1780,55 +1967,67 @@ pub fn bluetooth_status(snapshot: &Value) -> String {
     let scan = text(&value["scan"]);
     let advertise = text(&value["advertise"]);
     if value.is_string() {
-        return "Перезапустите службу: shum daemon --stop".into();
+        return t("Перезапустите службу: shum daemon --stop").into();
     }
     if scan == "other_profile" {
-        return "Рядом показывается другой выбранный профиль".into();
+        return t("Рядом показывается другой выбранный профиль").into();
     }
     if scan == "disabled" || value["enabled"] == false {
-        return "Bluetooth отключён · включить: shum --bluetooth status".into();
+        return t("Bluetooth отключён · включить: shum --bluetooth status").into();
     }
     if scan == "starting" && advertise == "starting" || scan.is_empty() && advertise.is_empty() {
-        return "Bluetooth: запускается поиск устройств рядом…".into();
+        return t("Bluetooth: запускается поиск устройств рядом…").into();
     }
     if [scan, advertise]
         .iter()
         .any(|s| s.contains("unauthorized") || s.contains("permission") || s.contains("Permission"))
     {
         return match std::env::consts::OS {
-            "macos" => "Разрешите Shum: Настройки macOS → Конфиденциальность → Bluetooth",
-            "linux" => "Нет доступа к Bluetooth: проверьте BlueZ и правила D-Bus/Polkit",
-            _ => "Нет доступа к Bluetooth: проверьте разрешения в настройках системы",
+            "macos" => t("Разрешите Shum: Настройки macOS → Конфиденциальность → Bluetooth"),
+            "linux" => t("Нет доступа к Bluetooth: проверьте BlueZ и правила D-Bus/Polkit"),
+            _ => t("Нет доступа к Bluetooth: проверьте разрешения в настройках системы"),
         }
         .into();
     }
     if scan == "poweredOff" || advertise == "poweredOff" {
-        return "Bluetooth выключен на компьютере".into();
+        return t("Bluetooth выключен на компьютере").into();
     }
     if scan.contains("adapter not found") || advertise == "unsupported" {
-        return "Bluetooth-адаптер не найден · доступна переписка через релей".into();
+        return t("Bluetooth-адаптер не найден · доступна переписка через релей").into();
     }
     if scan == "scanning" && advertise == "advertising" {
-        return "Bluetooth: поиск включён, ваш профиль виден рядом".into();
+        return t("Bluetooth: поиск включён, ваш профиль виден рядом").into();
     }
-    format!(
+    crate::i18n::format(
         "Bluetooth · поиск: {} · объявление: {}",
-        if scan.is_empty() {
-            "запуск"
-        } else {
-            scan
-        },
-        if advertise.is_empty() {
-            "запуск"
-        } else {
-            advertise
-        }
+        &[
+            (
+                "0",
+                (if scan.is_empty() {
+                    t("запуск")
+                } else {
+                    scan
+                })
+                .to_string(),
+            ),
+            (
+                "1",
+                (if advertise.is_empty() {
+                    t("запуск")
+                } else {
+                    advertise
+                })
+                .to_string(),
+            ),
+        ],
     )
 }
 
 pub fn nearby_label(contact: &Value) -> String {
     match contact["distance"].as_u64() {
-        Some(meters) => format!("Рядом · ~{meters} м"),
-        None => "Рядом · расстояние неизвестно".into(),
+        Some(meters) => {
+            crate::i18n::format("Рядом · ~{meters} м", &[("meters", format!("{}", meters))])
+        }
+        None => t("Рядом · расстояние неизвестно").into(),
     }
 }

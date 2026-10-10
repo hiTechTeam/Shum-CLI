@@ -17,6 +17,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 const BIN: &str = env!("CARGO_BIN_EXE_shum");
 fn command(root: &Path, profile: Option<&str>, args: &[&str]) -> Value {
     let mut command = Command::new(BIN);
+    command.env("SHUM_LANG", "en");
     command.arg("--data-dir").arg(root).arg("--json");
     if let Some(profile) = profile {
         command.args(["-p", profile]);
@@ -44,6 +45,7 @@ fn daemon(root: &Path, profile: &str) -> Daemon {
 fn daemon_at(binary: &Path, root: &Path, profile: &str) -> Daemon {
     Daemon(
         Command::new(binary)
+            .env("SHUM_LANG", "en")
             .arg("--data-dir")
             .arg(root)
             .args(["-p", profile, "daemon", "--run"])
@@ -349,6 +351,7 @@ async fn actual_cli_invitation_messages_receipts_profile_and_restart() {
 
 fn rejected(root: &Path, profile: &str, args: &[&str]) -> Value {
     let result = Command::new(BIN)
+        .env("SHUM_LANG", "en")
         .arg("--data-dir")
         .arg(root)
         .args(["--json", "-p", profile])
@@ -443,7 +446,7 @@ async fn network_id_invites_new_contact_with_duplicate_names_and_offline_card_ad
     ] {
         let error = rejected(&roots[0], aid, args);
         assert!(
-            error.to_string().contains("Имя не является адресом"),
+            error.to_string().contains("A name is not an address"),
             "{error}"
         );
     }
@@ -525,7 +528,7 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     let aowner = a["profile"]["ownerId"].as_str().unwrap();
     let bowner = b["profile"]["ownerId"].as_str().unwrap();
     let da = daemon(&root, aid);
-    let db = daemon(&root, bid);
+    let mut db = daemon(&root, bid);
     wait(&root, aid, |s| !s["relays"].as_array().unwrap().is_empty()).await;
     wait(&root, bid, |s| !s["relays"].as_array().unwrap().is_empty()).await;
     command(
@@ -598,11 +601,50 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
             .len(),
         1
     );
+    let kinds = |s: &Value| {
+        s["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(kinds(&snapshot(&root, aid).await), ["invitationSent"]);
+    assert_eq!(kinds(&snapshot(&root, bid).await), ["invitationReceived"]);
+    rejected(&root, aid, &["invite", bowner]);
+    rejected(&root, aid, &["send", bowner, "still waiting"]);
+    assert_eq!(kinds(&snapshot(&root, aid).await), ["invitationSent"]);
     command(&root, Some(bid), &["decline", aowner]);
     wait(&root, aid, |s| {
         s["contacts"][0]["phase"] == "declinedByPeer"
     })
     .await;
+    assert_eq!(
+        kinds(&snapshot(&root, aid).await),
+        ["invitationSent", "invitationDeclined"]
+    );
+    assert_eq!(
+        kinds(&snapshot(&root, bid).await),
+        ["invitationReceived", "invitationDeclinedLocally"]
+    );
+    assert_eq!(
+        command(&root, Some(bid), &["chats", "--invites"])["contacts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    command(&root, Some(bid), &["daemon", "--stop"]);
+    assert!(db.0.wait().unwrap().success());
+    db = daemon(&root, bid);
+    let restored = wait(&root, bid, |s| {
+        s["contacts"][0]["phase"] == "declinedLocally"
+    })
+    .await;
+    assert_eq!(
+        kinds(&restored),
+        ["invitationReceived", "invitationDeclinedLocally"]
+    );
     command(&root, Some(bid), &["block", aowner]);
     assert!(command(&root, Some(bid), &["contacts"])
         .as_array()
@@ -618,6 +660,47 @@ async fn command_filters_decline_block_cancel_profile_and_validation() {
     );
     // A local decline cannot immediately initiate a new invitation in v1.
     rejected(&root, bid, &["invite", aowner]);
+    rejected(&root, aid, &["invite", bowner]);
+    rejected(&root, aid, &["send", bowner, "declined"]);
+    command(&root, Some(bid), &["accept", aowner]);
+    let accepted = wait(&root, aid, |s| s["contacts"][0]["phase"] == "accepted").await;
+    assert_eq!(
+        kinds(&accepted),
+        ["invitationSent", "invitationDeclined", "invitationAccepted"]
+    );
+    assert_eq!(
+        kinds(&snapshot(&root, bid).await),
+        [
+            "invitationReceived",
+            "invitationDeclinedLocally",
+            "invitationAcceptedLocally"
+        ]
+    );
+    command(&root, Some(aid), &["send", bowner, "After accepting"]);
+    wait(&root, bid, |s| {
+        s["messages"][0]["text"] == "After accepting"
+    })
+    .await;
+    assert_eq!(kinds(&snapshot(&root, aid).await), kinds(&accepted));
+    command(&root, Some(bid), &["daemon", "--stop"]);
+    assert!(db.0.wait().unwrap().success());
+    db = daemon(&root, bid);
+    let restored = wait(&root, bid, |s| s["contacts"][0]["phase"] == "accepted").await;
+    assert_eq!(
+        kinds(&restored),
+        [
+            "invitationReceived",
+            "invitationDeclinedLocally",
+            "invitationAcceptedLocally"
+        ]
+    );
+    command(&root, Some(bid), &["clear", aowner, "--confirm"]);
+    command(&root, Some(bid), &["daemon", "--stop"]);
+    assert!(db.0.wait().unwrap().success());
+    db = daemon(&root, bid);
+    let cleared = wait(&root, bid, |s| s["contacts"][0]["phase"] == "accepted").await;
+    assert!(cleared["events"].as_array().unwrap().is_empty());
+    assert!(cleared["messages"].as_array().unwrap().is_empty());
     command(&root, Some(bid), &["profile", "name", "A"]);
     let renamed = command(&root, Some(bid), &["profile"]);
     assert_eq!(renamed["card"]["name"], "A");

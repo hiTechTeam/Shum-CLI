@@ -1,4 +1,5 @@
 //! First-run presentation and profile creation stay in the client.
+use crate::i18n::t;
 use crate::{
     display::{ACCENT as GREEN, MUTED},
     terminal::{safe, text},
@@ -34,12 +35,14 @@ pub fn initial_seed(keys: &ProfileKeys) -> u64 {
     shum_core::crypto::avatar_seed(&keys.signing.ed_public())
 }
 
-const SECURITY_STEPS: [&str; 4] = [
-    "Криптографические ключи",
-    "Шифрование",
-    "Защищённое хранилище",
-    "Проверка",
-];
+fn security_steps() -> [&'static str; 4] {
+    [
+        t("Криптографические ключи"),
+        t("Шифрование"),
+        t("Защищённое хранилище"),
+        t("Проверка"),
+    ]
+}
 
 /// Prepare and check security before asking for a name. Temporary encrypted
 /// storage is removed before returning; secrets stay in memory until the user
@@ -54,7 +57,8 @@ pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKe
     let encrypted = shum_store::codec::seal(keys.storage.expose(), &nonce, challenge, b"")?;
     ensure!(
         shum_store::codec::open(keys.storage.expose(), &encrypted, b"")?.as_slice() == challenge,
-        "Не прошла проверка шифрования"
+        "{}",
+        t("Не прошла проверка шифрования")
     );
     progress(2);
     Profiles::new(root)?;
@@ -66,7 +70,7 @@ pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKe
         &keys.noise,
         &keys.signing,
         &keys.nostr,
-        "Подготовка".into(),
+        t("Подготовка").into(),
         "",
         Some(0),
         1,
@@ -82,14 +86,19 @@ pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKe
     let reopened = shum_store::Store::open(&database, &keys.owner_id(), keys.storage_key())?;
     let stored: Card = serde_json::from_value(reopened.state()["ownProfileCard"].clone())?;
     stored.validate()?;
-    ensure!(stored == card, "Не прошла проверка защищённого хранилища");
+    ensure!(
+        stored == card,
+        "{}",
+        t("Не прошла проверка защищённого хранилища")
+    );
     ensure!(
         shum_core::crypto::verify_ed(
             &keys.signing.ed_public(),
             &keys.signing.sign(challenge),
             challenge
         ),
-        "Не прошла проверка ключа профиля"
+        "{}",
+        t("Не прошла проверка ключа профиля")
     );
     drop(reopened);
     temporary.close()?;
@@ -130,7 +139,8 @@ pub fn validate_name(name: &str) -> Result<()> {
             && name.len() <= 64
             && name.trim() == name
             && !name.chars().any(char::is_control),
-        "Имя: 1–64 байта UTF-8, без пробелов по краям (до 32 русских букв)"
+        "{}",
+        t("Имя: 1–64 байта UTF-8, без пробелов по краям (до 32 русских букв)")
     );
     Ok(())
 }
@@ -175,7 +185,8 @@ pub fn create(
         stored.validate()?;
         ensure!(
             stored == card && stored.id() == reopened.keys.owner_id(),
-            "Не прошла проверка сохранённого профиля"
+            "{}",
+            t("Не прошла проверка сохранённого профиля")
         );
         drop(reopened);
         profiles.select(&p.id)?;
@@ -184,8 +195,15 @@ pub fn create(
     if let Err(error) = save {
         if let Err(cleanup) = profiles.delete(&p.id) {
             bail!(
-                "{error}; не удалось удалить незавершённый профиль {}: {cleanup}",
-                p.id
+                "{}",
+                crate::i18n::format(
+                    "{error}; не удалось удалить незавершённый профиль {}: {cleanup}",
+                    &[
+                        ("error", format!("{}", error)),
+                        ("0", p.id.to_string()),
+                        ("cleanup", format!("{}", cleanup))
+                    ]
+                )
             );
         }
         return Err(error);
@@ -250,7 +268,7 @@ fn draw_security(
     );
     if area.width < 35 || area.height < 18 {
         frame.render_widget(
-            Paragraph::new("Увеличьте окно до 35×18. Esc отменить"),
+            Paragraph::new(t("Увеличьте окно до 35×18. Esc отменить")),
             area,
         );
         return;
@@ -258,11 +276,16 @@ fn draw_security(
     let x = area.x + 2;
     let width = area.width.saturating_sub(4);
     let row = |y| Rect::new(x, area.y + y, width, 1);
-    frame.render_widget(Paragraph::new("Создаём вашу защиту").style(green), row(1));
     frame.render_widget(
-        Paragraph::new("Ключи создаются и сохраняются только на этом устройстве.")
-            .style(muted)
-            .wrap(Wrap { trim: false }),
+        Paragraph::new(t("Создаём вашу защиту")).style(green),
+        row(1),
+    );
+    frame.render_widget(
+        Paragraph::new(t(
+            "Ключи создаются и сохраняются только на этом устройстве.",
+        ))
+        .style(muted)
+        .wrap(Wrap { trim: false }),
         Rect::new(x, area.y + 3, width, 2),
     );
     let tall = area.height >= 32 && area.width >= 40 && !ascii;
@@ -270,7 +293,7 @@ fn draw_security(
         animation::draw_key(frame, x + 2, area.y + 6, 13, animation);
     }
     let y = if tall { 20 } else { 6 };
-    for (index, title) in SECURITY_STEPS.iter().enumerate() {
+    for (index, title) in security_steps().iter().enumerate() {
         let (mark, style) = if index < completed {
             (if ascii { "+" } else { "✓" }, green)
         } else if index == completed {
@@ -321,8 +344,8 @@ fn draw_security(
     if completed == 4 {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("Ключ профиля создан. ", green),
-                Span::styled("Закрытые ключи не покидают устройство.", muted),
+                Span::styled(t("Ключ профиля создан. "), green),
+                Span::styled(t("Закрытые ключи не покидают устройство."), muted),
             ]))
             .wrap(Wrap { trim: false }),
             Rect::new(x, area.y + y + 6, width, 2),
@@ -330,9 +353,9 @@ fn draw_security(
     }
     if let Some(name) = name {
         let prefix = if width >= 60 {
-            "? Имя (до 64 байт UTF-8): "
+            t("? Имя (до 64 байт UTF-8): ")
         } else {
-            "? Имя: "
+            t("? Имя: ")
         };
         let prefix_width = unicode_width::UnicodeWidthStr::width(prefix) as u16;
         frame.render_widget(
@@ -353,9 +376,9 @@ fn draw_security(
     }
     frame.render_widget(
         Paragraph::new(if name.is_some() {
-            "Enter далее · Esc отменить · Ctrl+C выход"
+            t("Enter далее · Esc отменить · Ctrl+C выход")
         } else {
-            "Esc отменить · Ctrl+C выход"
+            t("Esc отменить · Ctrl+C выход")
         })
         .style(muted),
         row(area.height - 1),
@@ -390,28 +413,33 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
         |y: u16, h: u16| Rect::new(x, area.y + y, width, h.min(area.height.saturating_sub(y)));
     if area.width < 35 || area.height < 18 {
         frame.render_widget(
-            Paragraph::new("Увеличьте окно до 35×18. Esc отменить"),
+            Paragraph::new(t("Увеличьте окно до 35×18. Esc отменить")),
             area,
         );
         return;
     }
     frame.render_widget(
-        Paragraph::new("Shum · Новый профиль").style(green),
+        Paragraph::new(t("Shum · Новый профиль")).style(green),
         row(1, 1),
     );
     frame.render_widget(
-        Paragraph::new("Ключи создаются и сохраняются только на этом устройстве.")
-            .style(muted)
-            .wrap(Wrap { trim: false }),
+        Paragraph::new(t(
+            "Ключи создаются и сохраняются только на этом устройстве.",
+        ))
+        .style(muted)
+        .wrap(Wrap { trim: false }),
         row(3, 2),
     );
     {
         frame.render_widget(
-            Paragraph::new(format!("Имя: {}", safe(&wizard.name))),
+            Paragraph::new(crate::i18n::format(
+                "Имя: {}",
+                &[("0", safe(&wizard.name).to_string())],
+            )),
             row(6, 1),
         );
         frame.render_widget(
-            Paragraph::new("Аватар · пиксельный, его видят все").style(muted),
+            Paragraph::new(t("Аватар · пиксельный, его видят все")).style(muted),
             row(8, 1),
         );
         let text_avatar = pictures.cell_avatars();
@@ -446,24 +474,24 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
             Step::Avatar => vec![
                 Line::from(Span::styled(&wizard.name, green)),
                 Line::from(""),
-                Line::from("[r] другой вариант"),
-                Line::from("[Enter] оставить этот"),
-                Line::from("[Esc] изменить имя"),
+                Line::from(t("[r] другой вариант")),
+                Line::from(t("[Enter] оставить этот")),
+                Line::from(t("[Esc] изменить имя")),
             ],
             Step::Saving => vec![
-                Line::from(Span::styled("Сохраняем профиль…", green)),
-                Line::from("Шифруем базу и проверяем ключи."),
+                Line::from(Span::styled(t("Сохраняем профиль…"), green)),
+                Line::from(t("Шифруем базу и проверяем ключи.")),
             ],
             Step::Done => vec![
-                Line::from(Span::styled("✓ Профиль готов", green)),
-                Line::from("✓ Ключи и шифрование"),
+                Line::from(Span::styled(t("✓ Профиль готов"), green)),
+                Line::from(t("✓ Ключи и шифрование")),
                 Line::from(if wizard.file_keys {
-                    "✓ Файл ключей 0600"
+                    t("✓ Файл ключей 0600")
                 } else {
-                    "✓ Системное хранилище ключей"
+                    t("✓ Системное хранилище ключей")
                 }),
-                Line::from("✓ Проверка чтения и подписей"),
-                Line::from("[Enter] продолжить"),
+                Line::from(t("✓ Проверка чтения и подписей")),
+                Line::from(t("[Enter] продолжить")),
             ],
             Step::Name => unreachable!(),
         };
@@ -478,7 +506,7 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
         );
         if tall && wizard.step == Step::Avatar {
             frame.render_widget(
-                Paragraph::new("Фото-аватары пока недоступны.").style(muted),
+                Paragraph::new(t("Фото-аватары пока недоступны.")).style(muted),
                 row(if text_avatar { 24 } else { 21 }, 1),
             );
         }
@@ -491,9 +519,9 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
     );
     frame.render_widget(
         Paragraph::new(if wizard.step == Step::Name {
-            "Enter далее · Esc отменить · Ctrl+C выход"
+            t("Enter далее · Esc отменить · Ctrl+C выход")
         } else {
-            "Ctrl+C выход"
+            t("Ctrl+C выход")
         })
         .style(muted),
         row(area.height - 1, 1),
@@ -701,8 +729,8 @@ pub fn json(created: &Created) -> Result<Value> {
     )
 }
 pub fn completion(created: &Created) -> String {
-    format!(
+    crate::i18n::format(
         "Профиль «{}» готов.\nНаберите shum, чтобы открыть чаты, или shum --help.",
-        safe(text(&json!(created.profile.name)))
+        &[("0", safe(text(&json!(created.profile.name))).to_string())],
     )
 }
