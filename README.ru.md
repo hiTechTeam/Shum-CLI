@@ -6,7 +6,7 @@
 
 ## Установка
 
-Текущий выпуск: **0.1.7 preview, macOS 15+, Apple Silicon и Intel**.
+Текущий выпуск: **0.1.7 preview, ревизия Homebrew 1 (0.1.7_1), macOS 15+, Apple Silicon и Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -104,9 +104,9 @@ cargo fmt --all -- --check
 
 CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Клиент реализует черновик v1; синхронизация устройств впереди. Пакеты Linux и Windows пока готовятся.
 
-Версия 0.1.7 прошла 39 тестов CLI, проверку подписанного пакета, вывода в PTY и сценарий профилей и удаления под Rosetta. Замена службы 0.1.6 на 0.1.7 проверена на временном профиле. Сохранение разрешения Bluetooth и доставка на iPhone после этого обновления ещё требуют проверки на устройстве.
+Ревизия пакета 1 прошла 48 тестов CLI, проверку подписанного пакета и запуск под Rosetta. Замена службы с прежней версией 0.1.7 и новым хэшем проверена на временном профиле. Сохранение разрешения Bluetooth и доставка на iPhone после этой ревизии ещё требуют проверки на устройстве.
 
-[Проверка выпуска](docs/release-verification-0.1.7.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
+[Проверка выпуска](docs/release-verification-0.1.7-r1.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
 ## Лицензия
 

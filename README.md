@@ -6,7 +6,7 @@ Terminal client for Shum, built on [Shum Core](https://github.com/hiTechTeam/Shu
 
 ## Install
 
-Current release: **0.1.7 preview, macOS 15+, Apple Silicon and Intel**.
+Current release: **0.1.7 preview, Homebrew revision 1 (0.1.7_1), macOS 15+, Apple Silicon and Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -104,9 +104,9 @@ cargo fmt --all -- --check
 
 CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Linux and Windows packages are pending.
 
-Version 0.1.7 passed 39 CLI tests, signed-package checks, PTY rendering checks and a Rosetta profile/removal scenario. The 0.1.6 to 0.1.7 service upgrade was verified on a disposable profile. Bluetooth permission persistence and iPhone delivery after this update still need real-device verification.
+Package revision 1 passed 48 CLI tests, signed-package checks and a Rosetta version check. Service replacement with the same 0.1.7 version and a new binary hash was verified on a disposable profile. Bluetooth permission persistence and iPhone delivery after this revision still need real-device verification.
 
-[Release verification](docs/release-verification-0.1.7.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
+[Release verification](docs/release-verification-0.1.7-r1.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
 ## License
 
