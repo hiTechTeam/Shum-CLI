@@ -262,6 +262,12 @@ impl Drop for EndpointGuard {
         let _ = fs::remove_file(&self.0);
     }
 }
+async fn shutdown_signal() {
+    // Detached Windows processes do not always have a console control handler.
+    if tokio::signal::ctrl_c().await.is_err() {
+        std::future::pending::<()>().await;
+    }
+}
 pub async fn serve(root: &Path, id: &str) -> Result<()> {
     if root.join(id).join("locked").exists() {
         bail!("{}", t("Профиль заблокирован"));
@@ -278,7 +284,13 @@ pub async fn serve(root: &Path, id: &str) -> Result<()> {
             .collect()
     };
     let push = settings["pushURL"].as_str().map(str::to_owned);
-    let runtime = Runtime::new(open, &relays, push.as_deref())?;
+    let mut client = serde_json::Map::new();
+    client.insert("version".into(), serde_json::json!(env!("SHUM_VERSION")));
+    client.insert(
+        "build".into(),
+        serde_json::to_value(crate::identity::current()?)?,
+    );
+    let runtime = Runtime::new(open, &relays, push.as_deref(), client)?;
     let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let token = crate::runtime::random::<32>()?;
     let info = Endpoint {
@@ -293,7 +305,7 @@ pub async fn serve(root: &Path, id: &str) -> Result<()> {
     temp.persist(&path)?;
     let _guard = EndpointGuard(path);
     let (commands, receive) = mpsc::channel(128);
-    let mut task = tokio::spawn(runtime.run(receive));
+    let mut task = tokio::spawn(runtime.run(receive, shutdown_signal()));
     let slots = std::sync::Arc::new(Semaphore::new(32));
     let mut clients = tokio::task::JoinSet::new();
     loop {
@@ -303,7 +315,7 @@ pub async fn serve(root: &Path, id: &str) -> Result<()> {
                 let mut presented=[0;32];stream.read_exact(&mut presented).await?;if presented.iter().zip(token).fold(0u8,|difference,(a,b)|difference|(*a^b))!=0{bail!("unauthorized");}
                 let bytes=read_frame(&mut stream).await?;let request:Request=serde_json::from_slice(&bytes)?;
                 let (reply,received)=oneshot::channel();commands.send(Command {request,reply}).await.map_err(|_|anyhow!("daemon closed"))?;
-                let response=match received.await?{Ok(value)=>serde_json::json!({"ok":value}),Err(error)=>serde_json::json!({"error":error})};write_frame(&mut stream,&serde_json::to_vec(&response)?).await?;Ok::<(),anyhow::Error>(())
+                let response=match received.await?{Ok(value)=>serde_json::json!({"ok":value}),Err(error)=>serde_json::json!({"error":crate::runtime::describe(&error)})};write_frame(&mut stream,&serde_json::to_vec(&response)?).await?;Ok::<(),anyhow::Error>(())
             }).await;});},
             _=clients.join_next(),if !clients.is_empty()=>{}
         }

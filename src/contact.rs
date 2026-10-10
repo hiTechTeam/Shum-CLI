@@ -1,50 +1,16 @@
-//! Contact addressing uses identifiers; display names never select a recipient.
-use crate::i18n::t;
-use anyhow::{bail, Result};
-use std::collections::HashSet;
+//! Contact addressing lives in Shum-Core; the CLI words its failures.
+use anyhow::{anyhow, Result};
+pub use shum_session::contact::network_id;
 
+fn worded(failure: shum_session::Failure) -> anyhow::Error {
+    anyhow!("{}", crate::runtime::describe(&failure))
+}
 pub fn validate(selector: &str) -> Result<()> {
-    if !(8..=64).contains(&selector.len())
-        || !selector
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    {
-        bail!("{}", t("Укажите Shum ID (полный или уникальный префикс от 8 символов) либо полный сетевой ID. Имя не является адресом контакта."));
-    }
-    Ok(())
+    shum_session::contact::validate(selector).map_err(worded)
 }
-
-pub fn network_id(selector: &str) -> bool {
-    selector.len() == 64 && validate(selector).is_ok()
-}
-
 pub fn resolve<'a>(
     selector: &str,
     candidates: impl IntoIterator<Item = (&'a str, &'a str)>,
 ) -> Result<Option<String>> {
-    validate(selector)?;
-    let candidates: Vec<_> = candidates.into_iter().collect();
-    // An exact Shum ID always wins over prefixes or another card's network ID.
-    if candidates.iter().any(|(id, _)| *id == selector) {
-        return Ok(Some(selector.into()));
-    }
-    let matches: HashSet<_> = candidates
-        .into_iter()
-        .filter(|(id, network)| {
-            if selector.len() == 64 {
-                *network == selector
-            } else {
-                id.starts_with(selector)
-            }
-        })
-        .map(|(id, _)| id)
-        .collect();
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.into_iter().next().map(str::to_owned)),
-        _ => bail!(
-            "{}",
-            t("ID соответствует нескольким контактам. Укажите полный Shum ID.")
-        ),
-    }
+    shum_session::contact::resolve(selector, candidates).map_err(worded)
 }
