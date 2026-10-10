@@ -463,7 +463,7 @@ pub fn status(snapshot: &Value, root: &Path, ascii: bool) -> String {
     let relays = snapshot["relays"].as_array().map_or(0, Vec::len);
     format!(
         "{} {}\n{} {}\n{} {}\n{}\n{} {}\n{} {}",
-        p.paint(Tone::Accent, format!("Shum {}", env!("CARGO_PKG_VERSION"))),
+        p.paint(Tone::Accent, format!("Shum {}", env!("SHUM_VERSION"))),
         p.paint(Tone::Muted, t("· протокол v1")),
         p.paint(Tone::Muted, t("Профиль:")),
         safe(text(&snapshot["card"]["name"])),
@@ -546,7 +546,7 @@ pub fn render_about(
     let mut rows = vec![
         format!(
             "{} {}",
-            p.paint(Tone::Accent, format!("Shum {}", env!("CARGO_PKG_VERSION"))),
+            p.paint(Tone::Accent, format!("Shum {}", env!("SHUM_VERSION"))),
             p.paint(Tone::Muted, t("· протокол v1"))
         ),
         p.paint(

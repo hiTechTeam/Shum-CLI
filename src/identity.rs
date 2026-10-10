@@ -17,7 +17,7 @@ pub fn current() -> Result<&'static Build> {
     }
     let sha256 = hash(&std::env::current_exe()?)?;
     let _ = CURRENT.set(Build {
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: env!("SHUM_VERSION").into(),
         sha256,
     });
     Ok(CURRENT.get().expect("build identity initialized"))

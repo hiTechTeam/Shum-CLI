@@ -6,6 +6,10 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/hiTechTeam/Shum-CLI"
 
+# Windows builds started later and carry their own version line.
+[package.metadata.shum]
+windows-version = "0.1.0"
+
 [[bin]]
 name = "shum"
 path = "src/main.rs"

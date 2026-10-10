@@ -23,7 +23,7 @@ const HELP_STYLES: clap::builder::Styles = clap::builder::Styles::styled()
 #[derive(Parser)]
 #[command(
     name = "shum",
-    version,
+    version = env!("SHUM_VERSION"),
     styles = HELP_STYLES,
     about = t("Мессенджер без номера телефона"),
     after_help = t("Без команды открываются чаты. При первом запуске Shum предложит создать профиль.")

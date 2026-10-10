@@ -414,7 +414,7 @@ impl Runtime {
             messages.drain(..messages.len() - 2000);
         }
         let reactions:Vec<_>=self.engine.inbox.reactions.iter().map(|((message,person),mark)|json!({"messageID":message,"personID":person,"mark":mark})).collect();
-        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"events":crate::invitations::stored(self.profile.store.state(), &self.engine),"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("CARGO_PKG_VERSION"),"clientCommandVersion":COMMAND_SCHEMA_VERSION,"build":self.build})
+        json!({"profile":self.profile.profile,"card":own,"contacts":contacts,"messages":messages,"events":crate::invitations::stored(self.profile.store.state(), &self.engine),"reactions":reactions,"relays":self.pool.connected(),"bluetooth":self.bluetooth,"pushConfigured":self.push.is_some(),"pushError":self.push_error,"pushLast":self.push_last,"error":self.last_error,"version":env!("SHUM_VERSION"),"clientCommandVersion":COMMAND_SCHEMA_VERSION,"build":self.build})
     }
     fn command(&mut self, request: Request) -> Result<Value> {
         match request {

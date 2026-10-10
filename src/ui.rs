@@ -1415,7 +1415,7 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/chats","--nearby"]|["/nearby"]=>return Ok(Action::Tab(1)),
         ["/chats","--invites"]=>return Ok(Action::Tab(2)),
         ["/chats","--unread"]=>return Ok(Action::Tab(3)),
-        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),crate::i18n::format("Версия {} · протокол v1\nПрофиль: {}\nРелеев подключено: {}\n{}\nPush API: {}\n{}", &[("0", env!("CARGO_PKG_VERSION").to_string()), ("1", safe(text(&snapshot["card"]["name"])).to_string()), ("2", format!("{}", snapshot["relays"].as_array().map_or(0,Vec::len))), ("3", bluetooth_status(snapshot).to_string()), ("4", crate::terminal::push_status(snapshot).to_string()), ("5", safe(text(&snapshot["error"])).to_string())]))),
+        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),crate::i18n::format("Версия {} · протокол v1\nПрофиль: {}\nРелеев подключено: {}\n{}\nPush API: {}\n{}", &[("0", env!("SHUM_VERSION").to_string()), ("1", safe(text(&snapshot["card"]["name"])).to_string()), ("2", format!("{}", snapshot["relays"].as_array().map_or(0,Vec::len))), ("3", bluetooth_status(snapshot).to_string()), ("4", crate::terminal::push_status(snapshot).to_string()), ("5", safe(text(&snapshot["error"])).to_string())]))),
         ["/keys","verify",who]=>{let c:shum_core::card::Card=serde_json::from_value(find_contact(snapshot,who)?["card"].clone())?;return Ok(Action::Info(t("Сверка ключей").into(),crate::i18n::format("{}\n\nОтпечаток как в iPhone: {}\n\nShum ID: {}", &[("0", safe(&c.name).to_string()), ("1", crate::terminal::fingerprint(&c).to_string()), ("2", c.id().to_string())])));},
         _=>bail!("{}", t("Команда или аргументы не распознаны. /help: список и примеры")),
     };
@@ -2059,6 +2059,15 @@ pub fn bluetooth_status(snapshot: &Value) -> String {
     }
     if scan.contains("adapter not found") || advertise == "unsupported" {
         return t("Bluetooth-адаптер не найден · доступна переписка через релей").into();
+    }
+    // Windows and Linux find nearby devices but cannot be found yet.
+    if advertise.contains("not available on this platform") {
+        return if scan == "scanning" {
+            t("Bluetooth: поиск устройств рядом включён · этот компьютер другим пока не виден")
+        } else {
+            t("Bluetooth: запускается поиск устройств рядом…")
+        }
+        .into();
     }
     if scan == "scanning" && advertise == "advertising" {
         return t("Bluetooth: поиск включён, ваш профиль виден рядом").into();

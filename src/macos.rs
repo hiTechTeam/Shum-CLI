@@ -186,7 +186,7 @@ fn verify(app: &Path) -> Result<()> {
 pub(crate) fn service_build(root: &Path) -> Result<crate::identity::Build> {
     let app = prepare(root)?;
     Ok(crate::identity::Build {
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: env!("SHUM_VERSION").into(),
         sha256: crate::identity::hash(&app.join("Contents/MacOS/shum"))?,
     })
 }
