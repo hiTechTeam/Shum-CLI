@@ -1,3 +1,40 @@
+# Shum CLI 0.1.7, package revision 2 · 10 October 2026
+
+* Chat history shows pixel reaction icons with their authors' names.
+* Matching reactions share one icon and both names separated by `/`.
+  Different reactions each show their icon and author, separated by `/`.
+* Warp uses compact PNG icons. Terminal uses the same pixel artwork in coloured cells.
+* Reactions remain attached to their messages while scrolling and resizing;
+  modal windows cover the chat's PNG images.
+* App version remains 0.1.7. Homebrew package version is 0.1.7_2.
+
+Update with `brew update`, then `brew upgrade shum`. Reopen the chat interface
+for the new rendering. The service updates automatically on the next CLI command,
+preserving profiles, history and the outgoing queue. Script installations update
+by running `install.sh` again.
+
+macOS 15+, Apple Silicon and Intel. Self-signed app, not notarized;
+the pkg container is unsigned. Actual Intel hardware was not tested.
+
+## Русский
+
+* В переписке вместо названий реакций показаны пиксельные иконки с именами авторов.
+* У одинаковой реакции одна иконка и два имени через `/`.
+  У разных реакций своя иконка и имя автора, разделённые `/`.
+* В Warp используются компактные PNG, в Terminal те же рисунки из цветных ячеек.
+* Прокрутка, изменение размера и открытие окон учитывают расположение иконок.
+* Версия приложения осталась 0.1.7, пакет Homebrew: 0.1.7_2.
+
+Обновление: `brew update`, затем `brew upgrade shum`. Откройте интерфейс чатов
+заново. Служба обновится автоматически при следующей команде CLI с сохранением
+профилей, переписки и очереди отправки. Для установки скриптом повторите `install.sh`.
+
+macOS 15+, Apple Silicon и Intel. Приложение подписано прежним самоподписанным
+сертификатом, нотарификации нет; контейнер pkg не подписан.
+На настоящем Intel Mac не проверялось.
+
+---
+
 # Shum CLI 0.1.7, package revision 1 · 10 October 2026
 
 English · Русский below

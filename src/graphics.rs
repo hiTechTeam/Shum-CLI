@@ -12,14 +12,11 @@ use std::{collections::HashMap, io::Cursor, num::NonZeroU16};
 pub(crate) struct DirectImages {
     ids: HashMap<(u16, u16), u32>,
     pngs: HashMap<u64, String>,
+    reactions: HashMap<usize, String>,
 }
 
 impl DirectImages {
     pub fn draw(&mut self, frame: &mut Frame<'_>, seed: u64, area: Rect) {
-        let id = *self
-            .ids
-            .entry((area.x, area.y))
-            .or_insert_with(|| getrandom::u32().expect("OS random image identifier").max(1));
         if self.pngs.len() > 256 {
             self.pngs.clear();
         }
@@ -31,6 +28,31 @@ impl DirectImages {
                 .expect("PNG in memory");
             STANDARD.encode(png.into_inner())
         });
+        let png = png.clone();
+        self.place(frame, area, &png);
+    }
+
+    pub fn reaction(&mut self, frame: &mut Frame<'_>, index: usize, area: Rect) {
+        let png = self
+            .reactions
+            .entry(index)
+            .or_insert_with(|| {
+                let image = crate::ui::reaction_art::terminal_image(index);
+                let mut png = Cursor::new(Vec::new());
+                image
+                    .write_to(&mut png, image::ImageFormat::Png)
+                    .expect("reaction PNG");
+                STANDARD.encode(png.into_inner())
+            })
+            .clone();
+        self.place(frame, area, &png);
+    }
+
+    fn place(&mut self, frame: &mut Frame<'_>, area: Rect, png: &str) {
+        let id = *self
+            .ids
+            .entry((area.x, area.y))
+            .or_insert_with(|| getrandom::u32().expect("OS random image identifier").max(1));
         // Explicitly delete this slot before replacing it. Text erase sequences
         // do not delete graphic placements. q=2 suppresses terminal replies.
         let mut sequence = delete(id);

@@ -116,13 +116,16 @@ fn nearby_screen_shows_live_radio_state_and_only_nearby_contacts() {
 }
 #[test]
 fn tui_renders_chats_avatars_and_empty_state_in_small_terminals() {
+    let mut data = example();
+    data["profile"]["ownerId"] = json!("self");
+    data["reactions"][0]["personID"] = json!("self");
     let mut pictures = Pictures::new(Picker::halfblocks());
     for (width, height) in [(80, 32), (40, 16), (140, 45)] {
         for ascii in [false, true] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             let mut view = View::chat(ANNA);
             terminal
-                .draw(|f| draw(f, &example(), &mut view, &mut pictures, ascii))
+                .draw(|f| draw(f, &data, &mut view, &mut pictures, ascii))
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let screen = buffer
@@ -140,7 +143,9 @@ fn tui_renders_chats_avatars_and_empty_state_in_small_terminals() {
             assert!(!screen.contains('\x1b'));
             if width == 80 && !ascii {
                 assert!(screen.contains("синтезаторами"));
-                assert!(screen.contains("like"));
+                assert!(!screen.contains("like"));
+                assert!(screen.contains('▀'), "reaction uses pixel artwork");
+                assert!(screen.contains("Игорь Загоев"));
                 if let Ok(path) = std::env::var("SHUM_TEST_SCREEN") {
                     let cells=buffer.content.iter().map(|c|json!({"s":c.symbol(),"fg":format!("{:?}",c.fg),"bg":format!("{:?}",c.bg)})).collect::<Vec<_>>();
                     std::fs::write(

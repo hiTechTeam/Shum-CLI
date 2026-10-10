@@ -6,7 +6,7 @@ Terminal client for Shum, built on [Shum Core](https://github.com/hiTechTeam/Shu
 
 ## Install
 
-Current release: **0.1.7 preview, Homebrew revision 1 (0.1.7_1), macOS 15+, Apple Silicon and Intel**.
+Current release: **0.1.7 preview, Homebrew revision 2 (0.1.7_2), macOS 15+, Apple Silicon and Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -49,7 +49,7 @@ Replace CONTACT_ID with an ID from `shum contacts`. Contact commands use Shum ID
 
 In an open chat, `/invite` invites that peer. `/qr` shows your own card. Use `/help` for commands; Ctrl+Q exits the interface. Unread counts and typing indicators appear in the chat list. Terminal uses cell colors for avatars; Warp uses PNG.
 
-In an open chat, type `/react` and press Enter. Select a message with ↑/↓, press Enter, then choose a pixel reaction with the arrows and confirm with Enter. Esc goes back or cancels. Selecting your current reaction removes it. The menu uses the same eight pixel icons as iOS.
+In an open chat, type `/react` and press Enter. Select a message with ↑/↓, press Enter, then choose a pixel reaction with the arrows and confirm with Enter. Esc goes back or cancels. Selecting your current reaction removes it. The menu and chat history use the same eight pixel icons as iOS. Under a message, matching reactions share one icon followed by both names separated by `/`; different reactions each show their icon and author. Warp uses compact PNG icons.
 
 The service keeps running after the interface closes. `shum daemon --stop` stops it; `shum daemon --install` enables login startup. After an update, the next CLI command replaces an outdated service and preserves the outgoing queue. Allow Bluetooth access for Shum when macOS asks.
 
@@ -104,7 +104,7 @@ cargo fmt --all -- --check
 
 CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Linux and Windows packages are pending.
 
-Package revision 1 passed 48 CLI tests, signed-package checks and a Rosetta version check. Service replacement with the same 0.1.7 version and a new binary hash was verified on a disposable profile. Bluetooth permission persistence and iPhone delivery after this revision still need real-device verification.
+Package revision 2 adds pixel reactions and author names in chat history. See the release verification report for packaging checks. Bluetooth permission persistence and iPhone delivery after this revision still need real-device verification.
 
 [Release verification](docs/release-verification-0.1.7-r1.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 

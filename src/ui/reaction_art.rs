@@ -23,7 +23,7 @@ pub(super) const NAMES: [&str; 8] = [
     "Кошмар",
 ];
 
-fn art(kind: ReactionKind) -> ([&'static str; 12], &'static [(u8, u32)]) {
+pub(super) fn art(kind: ReactionKind) -> ([&'static str; 12], &'static [(u8, u32)]) {
     match kind {
         ReactionKind::Heart => (
             [
@@ -219,4 +219,17 @@ pub(super) fn draw(frame: &mut Frame<'_>, kind: ReactionKind, area: Rect) {
             }
         }
     }
+}
+
+/// Integer enlargement keeps pixel edges sharp in terminals with PNG support.
+pub(crate) fn terminal_image(index: usize) -> image::RgbaImage {
+    let (rows, colors) = art(KINDS[index]);
+    let source = image::RgbaImage::from_fn(12, 12, |x, y| {
+        colors
+            .iter()
+            .find(|(symbol, _)| *symbol == rows[y as usize].as_bytes()[x as usize])
+            .map(|(_, rgb)| image::Rgba([(rgb >> 16) as u8, (rgb >> 8) as u8, *rgb as u8, 255]))
+            .unwrap_or(image::Rgba([0, 0, 0, 0]))
+    });
+    image::imageops::resize(&source, 192, 192, image::imageops::FilterType::Nearest)
 }

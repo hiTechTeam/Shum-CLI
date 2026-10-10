@@ -1,4 +1,5 @@
-mod reaction_art;
+mod history_reactions;
+pub(crate) mod reaction_art;
 mod reactions;
 
 use crate::{
@@ -633,12 +634,15 @@ fn draw_content(
             inner.height.saturating_sub(header_height),
         );
         let mut lines = Vec::new();
+        let mut reaction_icons = Vec::new();
+        let mut visual_rows = 0;
         for m in snapshot["messages"]
             .as_array()
             .into_iter()
             .flatten()
             .filter(|m| m["contactID"] == *id)
         {
+            let message_start = lines.len();
             let own = m["outgoing"] == true;
             if let Some(reply) = m["reply"].as_object() {
                 lines.push(Line::from(Span::styled(
@@ -665,17 +669,22 @@ fn draw_content(
             } else {
                 line
             });
-            let marks = snapshot["reactions"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|r| r["messageID"] == m["id"])
-                .filter(|r| r["mark"]["reaction"].is_string())
-                .map(|r| text(&r["mark"]["reaction"]).to_owned())
-                .collect::<Vec<_>>();
-            if !marks.is_empty() {
-                lines.push(Line::from(Span::styled(marks.join(" "), style)));
+            visual_rows += Paragraph::new(lines[message_start..].to_vec())
+                .wrap(Wrap { trim: false })
+                .line_count(history.width);
+            let (mut reaction_lines, icons) = history_reactions::rows(
+                snapshot,
+                m,
+                history.width,
+                ascii,
+                pictures.direct.is_some(),
+            );
+            for mut icon in icons {
+                icon.row += visual_rows;
+                reaction_icons.push(icon);
             }
+            visual_rows += reaction_lines.len() + 1;
+            lines.append(&mut reaction_lines);
             lines.push(Line::from(""));
         }
         let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
@@ -688,6 +697,27 @@ fn draw_content(
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
+        if !pictures.hide_direct {
+            if let Some(direct) = &mut pictures.direct {
+                for icon in reaction_icons {
+                    // Never allow a PNG to cross the history border or input.
+                    if icon.row >= usize::from(offset)
+                        && icon.row + 2 <= usize::from(offset) + usize::from(history.height)
+                    {
+                        direct.reaction(
+                            frame,
+                            icon.index,
+                            Rect::new(
+                                history.x + icon.x,
+                                history.y + (icon.row - usize::from(offset)) as u16,
+                                4,
+                                2,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
         let input = Paragraph::new(if view.command_mode {
             ""
         } else {
@@ -1459,6 +1489,11 @@ async fn run_loop(
                     view.tab,
                     view.selected,
                     view.command_mode,
+                    view.scroll,
+                    // Reaction PNG placements move with wrapped message history.
+                    snapshot["messages"].to_string(),
+                    snapshot["reactions"].to_string(),
+                    snapshot["card"]["name"].to_string(),
                 ),
                 (
                     view.help,
@@ -1470,7 +1505,13 @@ async fn run_loop(
                 ),
                 contacts(snapshot, view.tab)
                     .iter()
-                    .map(|c| (text(&c["id"]), c["card"]["avatarSeed"].as_u64()))
+                    .map(|c| {
+                        (
+                            text(&c["id"]),
+                            c["card"]["avatarSeed"].as_u64(),
+                            text(&c["card"]["name"]),
+                        )
+                    })
                     .collect::<Vec<_>>(),
                 (
                     view.profile_selected,
