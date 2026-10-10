@@ -2,6 +2,8 @@ mod history_reactions;
 mod languages;
 pub(crate) mod reaction_art;
 mod reactions;
+#[cfg(test)]
+mod render_tests;
 
 use crate::i18n::t;
 use crate::{
@@ -74,8 +76,7 @@ pub struct Pictures {
     cache: HashMap<(u64, u16, u16), StatefulProtocol>,
     scene: Option<u64>,
     direct: Option<crate::graphics::DirectImages>,
-    hide_direct: bool,
-    popup_cover: Option<Rect>,
+    popup_covers: Vec<Rect>,
 }
 impl Pictures {
     pub fn new(picker: Picker) -> Self {
@@ -98,8 +99,7 @@ impl Pictures {
             cache: HashMap::new(),
             scene: None,
             direct: None,
-            hide_direct: false,
-            popup_cover: None,
+            popup_covers: Vec::new(),
         }
     }
     pub(crate) fn cell_avatars(&self) -> bool {
@@ -188,14 +188,12 @@ impl Pictures {
         if self.cache.len() > 256 {
             self.cache.clear();
         }
+        // Native images are separate terminal objects: a text Clear cannot cover them.
+        if covered_by(&self.popup_covers, area) {
+            return;
+        }
         if let Some(direct) = &mut self.direct {
-            if !self.hide_direct
-                && !self
-                    .popup_cover
-                    .is_some_and(|popup| !popup.intersection(area).is_empty())
-            {
-                direct.draw(frame, seed, area);
-            }
+            direct.draw(frame, seed, area);
             return;
         }
         let state = self
@@ -261,6 +259,57 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
         h,
     )
 }
+fn covered_by(covers: &[Rect], area: Rect) -> bool {
+    covers
+        .iter()
+        .any(|popup| !popup.intersection(area).is_empty())
+}
+fn profile_popup_area(area: Rect, count: usize) -> Rect {
+    centered(
+        area,
+        52,
+        count
+            .saturating_add(1)
+            .saturating_mul(4)
+            .saturating_add(5)
+            .min(usize::from(area.height)) as u16,
+    )
+}
+fn qr_size(code: &str) -> (u16, u16) {
+    (
+        code.lines().next().map_or(0, |s| s.chars().count()) as u16,
+        code.lines().count() as u16,
+    )
+}
+fn menu_covers(area: Rect, view: &View, ascii: bool, include_profiles: bool) -> Vec<Rect> {
+    let mut covers = Vec::new();
+    if include_profiles {
+        if let Some(profiles) = &view.profiles {
+            covers.push(profile_popup_area(area, profiles.len()));
+        }
+    }
+    if view.help || view.info.is_some() {
+        covers.push(centered(area, 76, 26));
+    }
+    if let Some(link) = &view.qr {
+        if ascii {
+            covers.push(centered(area, 76, 8));
+        } else if let Ok(code) = crate::terminal::qr(link, false) {
+            let (width, height) = qr_size(&code);
+            covers.push(centered(area, width + 4, height + 4));
+        }
+    }
+    if view.reactions.is_some() {
+        covers.push(reactions::popup_area(area));
+    }
+    if view.languages.is_some() {
+        covers.push(languages::popup_area(area));
+    }
+    if view.form.is_some() {
+        covers.push(centered(area, 56, 7));
+    }
+    covers
+}
 fn border(title: &str, ascii: bool) -> Block<'_> {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -286,6 +335,18 @@ fn stamp(ms: &Value) -> String {
         .map(|d| d.with_timezone(&chrono::Local).format("%H:%M").to_string())
         .unwrap_or_default()
 }
+fn delivery_marker(message: &Value, ascii: bool) -> String {
+    if message["outgoing"] != true {
+        return String::new();
+    }
+    let marker = ticks(text(&message["status"]), ascii);
+    // Keep the row width fixed from queued through read, including wrap edges.
+    if !ascii && ["queued", "forwarding", "delivered", "read"].contains(&text(&message["status"])) {
+        format!("{marker:>2}")
+    } else {
+        marker.into()
+    }
+}
 fn ticks(status: &str, ascii: bool) -> &str {
     match (status, ascii) {
         ("read", false) => "✓✓",
@@ -309,19 +370,9 @@ pub fn draw(
     pictures: &mut Pictures,
     ascii: bool,
 ) {
-    pictures.hide_direct = view.help
-        || view.qr.is_some()
-        || view.info.is_some()
-        || view.profiles.is_some()
-        || view.form.is_some();
-    pictures.popup_cover = view
-        .reactions
-        .as_ref()
-        .map(|_| reactions::popup_area(frame.area()))
-        .or_else(|| view.languages.map(|_| languages::popup_area(frame.area())));
+    pictures.popup_covers = menu_covers(frame.area(), view, ascii, true);
     draw_content(frame, snapshot, view, pictures, ascii);
-    pictures.hide_direct = false;
-    pictures.popup_cover = None;
+    pictures.popup_covers.clear();
     pictures.colors.apply(frame.buffer_mut(), ascii);
 }
 fn draw_content(
@@ -682,15 +733,7 @@ fn draw_content(
                 )));
             }
             let content = safe(text(&m["text"]));
-            let meta = format!(
-                " {} {}",
-                stamp(&m["timestamp"]),
-                if own {
-                    ticks(text(&m["status"]), ascii)
-                } else {
-                    ""
-                }
-            );
+            let meta = format!(" {} {}", stamp(&m["timestamp"]), delivery_marker(m, ascii));
             let line = Line::from(vec![
                 Span::raw(content),
                 Span::styled(meta, Style::default().fg(if own { accent } else { muted })),
@@ -728,37 +771,21 @@ fn draw_content(
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
-        // The picker covers only its own rectangle. Keep chat reactions visible
-        // around it; inline PNGs cannot rely on a later text Clear for occlusion.
-        let hide_reactions = view.help
-            || view.qr.is_some()
-            || view.info.is_some()
-            || view.profiles.is_some()
-            || view.form.is_some();
-        let reaction_popup = view
-            .reactions
-            .as_ref()
-            .map(|_| reactions::popup_area(frame.area()))
-            .or_else(|| view.languages.map(|_| languages::popup_area(frame.area())));
-        if !hide_reactions {
-            if let Some(direct) = &mut pictures.direct {
-                for icon in reaction_icons {
-                    use history_reactions::{PNG_HEIGHT, PNG_WIDTH};
-                    // Never allow a PNG to cross the history border or input.
-                    if icon.row >= usize::from(offset)
-                        && icon.row + usize::from(PNG_HEIGHT)
-                            <= usize::from(offset) + usize::from(history.height)
-                    {
-                        let area = Rect::new(
-                            history.x + icon.x,
-                            history.y + (icon.row - usize::from(offset)) as u16,
-                            PNG_WIDTH,
-                            PNG_HEIGHT,
-                        );
-                        if reaction_popup.is_some_and(|popup| !popup.intersection(area).is_empty())
-                        {
-                            continue;
-                        }
+        if let Some(direct) = &mut pictures.direct {
+            for icon in reaction_icons {
+                use history_reactions::{PNG_HEIGHT, PNG_WIDTH};
+                // Never allow a PNG to cross the history border or input.
+                if icon.row >= usize::from(offset)
+                    && icon.row + usize::from(PNG_HEIGHT)
+                        <= usize::from(offset) + usize::from(history.height)
+                {
+                    let area = Rect::new(
+                        history.x + icon.x,
+                        history.y + (icon.row - usize::from(offset)) as u16,
+                        PNG_WIDTH,
+                        PNG_HEIGHT,
+                    );
+                    if !covered_by(&pictures.popup_covers, area) {
                         direct.reaction(frame, icon.index, area);
                     }
                 }
@@ -869,20 +896,14 @@ fn draw_content(
         }
     }
     if let Some(profiles) = &view.profiles {
-        // Hide chat graphics behind the modal, but allow the modal's own PNGs.
-        let hidden_behind_modal = pictures.hide_direct;
-        pictures.hide_direct = view.help
-            || view.info.is_some()
-            || view.qr.is_some()
-            || view.form.is_some()
-            || view.reactions.is_some();
+        // Profile thumbnails belong to this layer; only higher menus cover them.
+        let background_covers = std::mem::replace(
+            &mut pictures.popup_covers,
+            menu_covers(area, view, ascii, false),
+        );
         let row_height = 3;
         let stride = row_height + 1;
-        let popup = centered(
-            area,
-            52,
-            ((profiles.len() as u16 + 1) * stride + 5).min(area.height),
-        );
+        let popup = profile_popup_area(area, profiles.len());
         frame.render_widget(Clear, popup);
         let block = border(t(" Профили "), ascii).border_style(style);
         let inner = block.inner(popup);
@@ -968,7 +989,7 @@ fn draw_content(
                 }
             }
         }
-        pictures.hide_direct = hidden_behind_modal;
+        pictures.popup_covers = background_covers;
         frame.render_widget(
             Paragraph::new(t("Enter выбрать · d удалить · Esc закрыть"))
                 .style(Style::default().fg(muted)),
@@ -1017,8 +1038,7 @@ fn draw_content(
                 popup,
             );
         } else if let Ok(code) = crate::terminal::qr(link, false) {
-            let height = code.lines().count() as u16;
-            let width = code.lines().next().map_or(0, |s| s.chars().count()) as u16;
+            let (width, height) = qr_size(&code);
             let popup = centered(area, width + 4, height + 4);
             frame.render_widget(Clear, popup);
             frame.render_widget(
@@ -1076,6 +1096,7 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = crossterm::execute!(
             std::io::stdout(),
+            crossterm::terminal::EndSynchronizedUpdate,
             event::DisableMouseCapture,
             event::DisableBracketedPaste
         );
@@ -1416,7 +1437,7 @@ fn invitation(snapshot: &Value, size: ratatui::layout::Size) -> Result<String> {
     ))
 }
 struct Pending {
-    task: tokio::task::JoinHandle<Result<Option<String>>>,
+    task: tokio::task::JoinHandle<Result<Option<(String, Value)>>>,
     clear_input: bool,
     input: String,
 }
@@ -1564,6 +1585,93 @@ pub async fn run(
         view = View::default();
     }
 }
+// Transport receipts and retries change text, not the image layout.
+fn history_layout(snapshot: &Value, view: &View, ascii: bool) -> String {
+    let messages: Vec<_> = snapshot["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| {
+            view.opened
+                .as_deref()
+                .is_some_and(|id| m["contactID"] == id)
+        })
+        .collect();
+    // With no reaction placements in the history, new text cannot move a PNG.
+    // Chat/list avatars occupy fixed rectangles and are tracked separately.
+    let has_reactions = snapshot["reactions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|r| messages.iter().any(|m| m["id"] == r["messageID"]));
+    if !has_reactions {
+        return String::new();
+    }
+    let layout: Vec<_> = messages.into_iter().map(|m| serde_json::json!({
+        "id": m["id"], "text": m["text"], "timestamp": m["timestamp"],
+        "outgoing": m["outgoing"], "replyText": m["reply"]["text"],
+        "markerWidth": unicode_width::UnicodeWidthStr::width(delivery_marker(m, ascii).as_str()),
+    })).collect();
+    serde_json::to_string(&layout).expect("message layout JSON")
+}
+
+fn graphics_scene(profile: &str, snapshot: &Value, view: &View, ascii: bool) -> u64 {
+    let mut hash = DefaultHasher::new();
+    (
+        (
+            profile,
+            view.opened.as_deref(),
+            view.tab,
+            view.selected,
+            view.scroll,
+            // Only rendered content/width can move the history images.
+            history_layout(snapshot, view, ascii),
+            snapshot["reactions"].to_string(),
+            snapshot["events"].to_string(),
+            snapshot["card"]["name"].to_string(),
+        ),
+        (
+            view.command_mode,
+            view.help,
+            view.qr.is_some(),
+            view.info.is_some(),
+            view.profiles.is_some(),
+            view.form.is_some(),
+            view.reactions.is_some(),
+            view.languages.is_some(),
+            crate::i18n::current(),
+        ),
+        contacts(snapshot, view.tab)
+            .iter()
+            .map(|c| {
+                (
+                    text(&c["id"]),
+                    c["card"]["avatarSeed"].as_u64(),
+                    text(&c["card"]["name"]),
+                )
+            })
+            .collect::<Vec<_>>(),
+        (
+            view.profile_selected,
+            view.profiles.as_ref().map(|profiles| {
+                profiles
+                    .iter()
+                    .map(|p| {
+                        (
+                            p.id.as_str(),
+                            view.profile_details
+                                .get(&p.id)
+                                .and_then(|d| d["card"]["avatarSeed"].as_u64()),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }),
+        ),
+    )
+        .hash(&mut hash);
+    hash.finish()
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_loop(
     root: &Path,
@@ -1592,7 +1700,7 @@ async fn run_loop(
             let mut job = pending.take().unwrap();
             match (&mut job.task).await? {
                 Ok(next) => {
-                    if let Some(id) = next {
+                    if let Some((id, next_snapshot)) = next {
                         if id.is_empty() {
                             return Ok(false);
                         }
@@ -1600,7 +1708,7 @@ async fn run_loop(
                         view.opened = None;
                         view.selected = 0;
                         (worker, updates, activity) = feed(root, profile);
-                        *snapshot = Value::Null;
+                        *snapshot = next_snapshot;
                     }
                     if job.clear_input && view.input == job.input {
                         view.input.clear();
@@ -1614,61 +1722,14 @@ async fn run_loop(
                 Err(error) => view.status = error.to_string(),
             }
         }
-        pictures.clear_on_change(
-            terminal,
-            (
-                (
-                    profile.as_str(),
-                    view.opened.as_deref(),
-                    view.tab,
-                    view.selected,
-                    view.command_mode,
-                    view.scroll,
-                    // Reaction PNG placements move with wrapped message history.
-                    snapshot["messages"].to_string(),
-                    snapshot["reactions"].to_string(),
-                    snapshot["events"].to_string(),
-                    snapshot["card"]["name"].to_string(),
-                ),
-                (
-                    view.help,
-                    view.qr.is_some(),
-                    view.info.is_some(),
-                    view.profiles.is_some(),
-                    view.form.is_some(),
-                    view.reactions.is_some(),
-                    view.languages.is_some(),
-                    crate::i18n::current(),
-                ),
-                contacts(snapshot, view.tab)
-                    .iter()
-                    .map(|c| {
-                        (
-                            text(&c["id"]),
-                            c["card"]["avatarSeed"].as_u64(),
-                            text(&c["card"]["name"]),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-                (
-                    view.profile_selected,
-                    view.profiles.as_ref().map(|profiles| {
-                        profiles
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.id.as_str(),
-                                    view.profile_details
-                                        .get(&p.id)
-                                        .and_then(|d| d["card"]["avatarSeed"].as_u64()),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    }),
-                ),
-            ),
-        )?;
-        terminal.draw(|f| draw(f, snapshot, view, pictures, ascii))?;
+        use crossterm::SynchronizedUpdate;
+        // Keep graphic deletion, screen clearing and the complete next frame in
+        // one synchronized update. End is sent even when rendering returns Err.
+        std::io::stdout().sync_update(|_| -> std::io::Result<()> {
+            pictures.clear_on_change(terminal, graphics_scene(profile, snapshot, view, ascii))?;
+            terminal.draw(|f| draw(f, snapshot, view, pictures, ascii))?;
+            Ok(())
+        })??;
         let action = if event::poll(Duration::from_millis(50))? {
             match event::read()? {
                 Event::Key(key) => handle_key(view, snapshot, key),
@@ -1828,8 +1889,9 @@ async fn run_loop(
                                 ipc::request(&root, &current, Request::Focus { contact: None }),
                             )
                             .await;
+                            let snapshot = ipc::request(&root, &id, Request::Snapshot).await?;
                             shum_store::profiles::Profiles::new(&root)?.select(&id)?;
-                            Ok(Some(id))
+                            Ok(Some((id, snapshot)))
                         }
                         Action::Delete(id) => {
                             ipc::stop(&root, &id).await?;
@@ -1837,10 +1899,13 @@ async fn run_loop(
                             profiles.delete(&id)?;
                             if id == current {
                                 let next = profiles.list()?.0.unwrap_or_default();
-                                if !next.is_empty() {
+                                let snapshot = if next.is_empty() {
+                                    Value::Null
+                                } else {
                                     ipc::ensure(&root, &next).await?;
-                                }
-                                Ok(Some(next))
+                                    ipc::request(&root, &next, Request::Snapshot).await?
+                                };
+                                Ok(Some((next, snapshot)))
                             } else {
                                 Ok(None)
                             }

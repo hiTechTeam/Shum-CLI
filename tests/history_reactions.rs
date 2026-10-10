@@ -139,7 +139,19 @@ fn icons_stay_inside_history_on_scroll_resize_and_modal() {
     }
     let mut view = View::chat("peer");
     view.help = true;
-    assert_eq!(png_count(&render(&s, &mut view, true, 140, 32)), 0);
+    let buffer = render(&s, &mut view, true, 140, 32);
+    assert_eq!(
+        png_count(&buffer),
+        1,
+        "reaction outside help remains visible"
+    );
+    let popup = ratatui::layout::Rect::new(32, 3, 76, 26);
+    for (i, cell) in buffer.content.iter().enumerate() {
+        if cell.symbol().contains("\x1b_Ga=T,") {
+            let icon = ratatui::layout::Rect::new((i % 140) as u16 - 1, (i / 140) as u16, 2, 1);
+            assert!(icon.intersection(popup).is_empty());
+        }
+    }
 }
 
 #[test]

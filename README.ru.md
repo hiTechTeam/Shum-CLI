@@ -6,7 +6,7 @@
 
 ## Установка
 
-Текущий выпуск: **0.1.8 preview, macOS 15+, Apple Silicon и Intel**.
+Текущий выпуск: **0.1.8 preview (Homebrew 0.1.8_1), macOS 15+, Apple Silicon и Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -120,9 +120,9 @@ cargo fmt --all -- --check
 
 CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Клиент реализует черновик v1; синхронизация устройств впереди. Пакеты Linux и Windows пока готовятся.
 
-Версия 0.1.8 добавляет десять языков, управление меню с клавиатуры и историю приглашений, исправляет исчезновение изображений рядом с меню. Проверки описаны в [отчёте выпуска](docs/release-verification-0.1.8.md). Сохранение разрешения Bluetooth и доставка на iPhone после этого выпуска ещё требуют проверки на устройстве.
+Версия 0.1.8 добавляет десять языков, управление меню с клавиатуры и историю приглашений, исправляет исчезновение изображений рядом с меню. Проверки описаны в [отчёте выпуска](docs/release-verification-0.1.8-r1.md). Сохранение разрешения Bluetooth и доставка на iPhone после этого выпуска ещё требуют проверки на устройстве.
 
-[Проверка выпуска](docs/release-verification-0.1.8.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
+[Проверка выпуска](docs/release-verification-0.1.8-r1.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
 ## Лицензия
 

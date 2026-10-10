@@ -7,13 +7,13 @@ use shum_cli::{
 };
 
 #[test]
-fn warp_profile_modal_keeps_its_own_images_and_hides_chat_images() {
+fn warp_profile_modal_keeps_its_own_and_uncovered_chat_images() {
     let display = Display::for_terminal("WarpTerminal", "xterm-256color", "", false, false);
     let mut picker = Picker::halfblocks();
     picker.set_protocol_type(display.images);
     let mut pictures = Pictures::with_display(picker, display);
-    let snapshot = json!({"profile":{"id":"first"},"card":{"name":"Same name","avatarSeed":42},"contacts":[{"id":"peer","phase":"accepted","card":{"name":"Peer","avatarSeed":123}}]});
-    let mut view = View::chat("peer");
+    let snapshot = json!({"profile":{"id":"first"},"card":{"name":"Same name","avatarSeed":42},"contacts":[{"id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","phase":"accepted","card":{"name":"Peer","avatarSeed":123}}]});
+    let mut view = View::chat("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     view.profiles = Some(
         serde_json::from_value(json!([
             {"id":"first","name":"Same name","ownerId":"a","keyBackend":"file"},
@@ -25,7 +25,7 @@ fn warp_profile_modal_keeps_its_own_images_and_hides_chat_images() {
         "second".into(),
         json!({"card":{"avatarSeed":123},"chatCount":2}),
     );
-    let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(160, 50)).unwrap();
     for selected in [0, 1, 2, 0] {
         view.profile_selected = selected;
         terminal
@@ -40,27 +40,35 @@ fn warp_profile_modal_keeps_its_own_images_and_hides_chat_images() {
             .collect::<Vec<_>>();
         assert_eq!(
             images.len(),
-            2,
-            "only the two profile avatars should be visible"
+            4,
+            "both profile thumbnails and both uncovered chat avatars stay visible"
         );
-        for image in images {
+        for row in [19, 23] {
             assert!(
-                image.symbol().contains("c=6,r=3,"),
-                "profile thumbnails stay inside their rows"
+                images
+                    .iter()
+                    .any(|image| image.symbol().contains(&format!("\x1b[{row};57H"))
+                        && image.symbol().contains("c=6,r=3,")),
+                "profile thumbnail stays inside its row"
             );
         }
     }
-    // A second modal must cover the profile PNGs as well as the chat PNGs.
+    // A second modal covers only the images under its own rectangle.
     view.help = true;
     terminal
         .draw(|frame| draw(frame, &snapshot, &mut view, &mut pictures, false))
         .unwrap();
-    assert!(terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .all(|c| !c.symbol().contains("\x1b_Ga=T,")));
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .filter(|c| c.symbol().contains("\x1b_Ga=T,"))
+            .count(),
+        2,
+        "help covers profile thumbnails but leaves both chat avatars outside it"
+    );
 }
 
 #[test]

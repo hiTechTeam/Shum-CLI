@@ -1,3 +1,41 @@
+# Shum CLI 0.1.8 · package revision 1
+
+* Avatars and reaction icons remain visible outside every menu, including profiles, help, QR and confirmation dialogs.
+* Profile switching waits for the new profile data instead of showing an empty frame.
+* Delivery status updates no longer repeatedly clear the Warp screen. Graphics and text redraw together.
+
+App version: 0.1.8. Homebrew package: 0.1.8_1. macOS 15+, Apple Silicon and Intel.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+Reopen the chat interface after upgrading. The service refreshes automatically.
+For script installations, run `install.sh` again. Profiles and messages are preserved.
+
+40 tests and Clippy passed. The owner confirmed the signed preview works in Warp.
+The published binary is identical to that preview. The app is self-signed and not
+notarized; the pkg container is unsigned. Actual Intel hardware and Bluetooth
+permission persistence were not retested for this revision.
+
+## Русский
+
+* Аватары и реакции остаются видимыми вне всех меню, включая профили, справку, QR и подтверждения.
+* Переключение профиля дожидается новых данных, без пустого промежуточного кадра.
+* Обновления статуса доставки больше не очищают экран Warp несколько раз. Графика и текст перерисовываются вместе.
+
+Версия CLI 0.1.8, пакет Homebrew 0.1.8_1. Обновление: `brew update`, затем
+`brew upgrade shum`. После обновления откройте интерфейс чатов заново.
+Для установки скриптом повторите `install.sh`. Профили и переписка сохраняются.
+
+Прошли 40 тестов и Clippy. Владелец подтвердил работу подписанной сборки в Warp;
+опубликован тот же бинарник. Настоящий Intel Mac и сохранение разрешения Bluetooth
+для этой ревизии повторно не проверялись.
+
+Удаление: `shum daemon --uninstall`, затем `brew uninstall shum`. Данные остаются
+в `~/Library/Application Support/org.Shum.Shum` или вашем `--data-dir`.
+
 # Shum CLI 0.1.8 · 10 October 2026
 
 * Ten interface languages: English, Russian, Spanish, Simplified Chinese, Hindi,
