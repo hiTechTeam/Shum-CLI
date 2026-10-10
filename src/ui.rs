@@ -74,6 +74,7 @@ pub struct Pictures {
     picker: Picker,
     pub(crate) colors: crate::display::Colors,
     cache: HashMap<(u64, u16, u16), StatefulProtocol>,
+    reactions: HashMap<(usize, u16, u16), StatefulProtocol>,
     scene: Option<u64>,
     direct: Option<crate::graphics::DirectImages>,
     popup_covers: Vec<Rect>,
@@ -97,6 +98,7 @@ impl Pictures {
             picker,
             colors,
             cache: HashMap::new(),
+            reactions: HashMap::new(),
             scene: None,
             direct: None,
             popup_covers: Vec::new(),
@@ -104,6 +106,32 @@ impl Pictures {
     }
     pub(crate) fn cell_avatars(&self) -> bool {
         self.picker.protocol_type() == ratatui_image::picker::ProtocolType::Halfblocks
+    }
+    /// Compact reaction pictures: Warp through direct placements, and Windows
+    /// consoles through their image protocol. Other terminals keep cell artwork.
+    pub(crate) fn image_reactions(&self) -> bool {
+        self.direct.is_some() || (cfg!(windows) && !self.cell_avatars())
+    }
+    fn reaction(&mut self, frame: &mut Frame<'_>, index: usize, area: Rect) {
+        if let Some(direct) = &mut self.direct {
+            direct.reaction(frame, index, area);
+            return;
+        }
+        let state = self
+            .reactions
+            .entry((index, area.width, area.height))
+            .or_insert_with(|| {
+                self.picker
+                    .new_resize_protocol(image::DynamicImage::ImageRgba8(
+                        reaction_art::terminal_image(index),
+                    ))
+            });
+        frame.render_stateful_widget(
+            StatefulImage::default()
+                .resize(Resize::Scale(Some(image::imageops::FilterType::Nearest))),
+            area,
+            state,
+        );
     }
     pub(crate) fn clear_on_change<B: ratatui::backend::Backend>(
         &mut self,
@@ -751,7 +779,7 @@ fn draw_content(
                 m,
                 history.width,
                 ascii,
-                pictures.direct.is_some(),
+                pictures.image_reactions(),
             );
             for mut icon in icons {
                 icon.row += visual_rows;
@@ -771,7 +799,7 @@ fn draw_content(
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
-        if let Some(direct) = &mut pictures.direct {
+        if pictures.image_reactions() {
             for icon in reaction_icons {
                 use history_reactions::{PNG_HEIGHT, PNG_WIDTH};
                 // Never allow a PNG to cross the history border or input.
@@ -786,7 +814,7 @@ fn draw_content(
                         PNG_HEIGHT,
                     );
                     if !covered_by(&pictures.popup_covers, area) {
-                        direct.reaction(frame, icon.index, area);
+                        pictures.reaction(frame, icon.index, area);
                     }
                 }
             }
