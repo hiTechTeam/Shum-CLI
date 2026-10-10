@@ -15,11 +15,11 @@ name = "shum"
 path = "src/main.rs"
 
 [dependencies]
-shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "55bc4ed84417c3ce86735a8d37c0e5f0b889c13d" }
-shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "55bc4ed84417c3ce86735a8d37c0e5f0b889c13d" }
-shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "55bc4ed84417c3ce86735a8d37c0e5f0b889c13d" }
-shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "55bc4ed84417c3ce86735a8d37c0e5f0b889c13d" }
-shum-session = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "55bc4ed84417c3ce86735a8d37c0e5f0b889c13d" }
+shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "9038f8ab03dc52dba46fb295d2dc4d64df0209dc" }
+shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "9038f8ab03dc52dba46fb295d2dc4d64df0209dc" }
+shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "9038f8ab03dc52dba46fb295d2dc4d64df0209dc" }
+shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "9038f8ab03dc52dba46fb295d2dc4d64df0209dc" }
+shum-session = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "9038f8ab03dc52dba46fb295d2dc4d64df0209dc" }
 anyhow = "1"
 fs2 = "0.4.3"
 base64 = "0.22.1"
@@ -47,4 +47,3 @@ tempfile = "3"
 tempfile = "3"
 futures-util = { version = "0.3", features = ["sink"] }
 tokio-tungstenite = "0.30.0"
-
