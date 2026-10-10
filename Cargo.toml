@@ -8,7 +8,7 @@ repository = "https://github.com/hiTechTeam/Shum-CLI"
 
 # Windows builds started later and carry their own version line.
 [package.metadata.shum]
-windows-version = "0.1.1"
+windows-version = "0.1.2"
 
 [[bin]]
 name = "shum"

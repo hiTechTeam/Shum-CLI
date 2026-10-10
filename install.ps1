@@ -45,6 +45,9 @@ switch ($architecture) {
 $asset = "shum-windows-$arch.zip"
 
 New-Item -ItemType Directory -Force -Path (Split-Path $lock) | Out-Null
+# A lock older than ten minutes was left by an installer that was closed or hung.
+$stale = Get-Item -LiteralPath $lock -ErrorAction SilentlyContinue
+if ($stale -and $stale.CreationTime -lt (Get-Date).AddMinutes(-10)) { Remove-Item -LiteralPath $lock -Recurse -Force }
 try { New-Item -ItemType Directory -Path $lock -ErrorAction Stop | Out-Null }
 catch { Fail "Другой установщик работает. После аварийного завершения удалите $lock вручную." }
 
@@ -109,7 +112,13 @@ try {
     if (-not (($env:Path -split ';') -contains $installDir)) { $env:Path = "$env:Path;$installDir" }
 
     # Refresh active profiles; a first install never opens keys or creates a profile.
-    & $binary daemon --refresh | Out-Null
+    # The restarted service outlives this command, so its output must not go to
+    # a pipe: PowerShell would wait for the service to close it. Wait for this
+    # process alone, with output in a file.
+    $log = Join-Path $temporary 'refresh.log'
+    $refresh = Start-Process -FilePath $binary -ArgumentList 'daemon', '--refresh' -NoNewWindow -PassThru `
+        -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    if (-not $refresh.WaitForExit(120000)) { Write-Host 'Shum: службы ещё перезапускаются, это можно не ждать.' }
     Write-Host "$($version -replace '^shum ', 'Shum ') установлен. Запуск: shum"
     Write-Host 'Если команда не найдена, откройте новое окно терминала.'
 }

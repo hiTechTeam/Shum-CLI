@@ -41,11 +41,17 @@ impl Display {
             std::env::var_os("KITTY_WINDOW_ID").is_some(),
             std::env::var_os("WT_SESSION").is_some(),
         );
-        // Every Windows 10+ console renders RGB; images depend on the console.
+        // Every Windows 10+ console renders RGB; images depend on the console,
+        // which is only asked when someone is looking at it.
         #[cfg(windows)]
         {
+            use std::io::IsTerminal;
             display.colors = Colors::Rgb;
-            display.images = windows_picker().protocol_type();
+            display.images = if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+                windows_picker().protocol_type()
+            } else {
+                ProtocolType::Halfblocks
+            };
         }
         display
     }
