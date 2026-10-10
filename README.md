@@ -104,7 +104,7 @@ cargo fmt --all -- --check
 
 CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Linux and Windows packages are pending.
 
-Package revision 2 adds pixel reactions and author names in chat history. See the release verification report for packaging checks. Bluetooth permission persistence and iPhone delivery after this revision still need real-device verification.
+Package revision 2 adds pixel reactions and author names in chat history. See the [release verification report](docs/release-verification-0.1.7-r2.md) for packaging checks. Bluetooth permission persistence and iPhone delivery after this revision still need real-device verification.
 
 [Release verification](docs/release-verification-0.1.7-r1.md) · [Distribution](docs/distribution.md) · [Protocol status](docs/protocol-status.md) · [Detailed guide in Russian](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
