@@ -232,13 +232,21 @@ pub fn avatar(seed: u64, ascii: bool) {
     }
 }
 fn native_avatar(seed: u64) -> Result<bool> {
-    use ratatui_image::picker::{Picker, ProtocolType};
+    #[cfg(not(windows))]
+    use ratatui_image::picker::Picker;
+    use ratatui_image::picker::ProtocolType;
     let protocol = crate::display::Display::detect().images;
     if protocol == ProtocolType::Halfblocks {
         return Ok(false);
     }
-    let mut picker = Picker::halfblocks();
-    picker.set_protocol_type(protocol);
+    #[cfg(windows)]
+    let picker = crate::display::windows_picker();
+    #[cfg(not(windows))]
+    let picker = {
+        let mut picker = Picker::halfblocks();
+        picker.set_protocol_type(protocol);
+        picker
+    };
     let mut pictures = crate::ui::Pictures::new(picker);
     let mut terminal = ratatui::Terminal::with_options(
         ratatui::backend::CrosstermBackend::new(io::stdout()),

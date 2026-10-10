@@ -105,7 +105,7 @@
   "Нет доступа к Bluetooth: проверьте разрешения в настройках системы": "Permite el acceso a Bluetooth en los ajustes del sistema",
   "Bluetooth выключен на компьютере": "Bluetooth está apagado en este equipo",
   "Bluetooth-адаптер не найден · доступна переписка через релей": "Sin adaptador Bluetooth. Los relés siguen disponibles",
-  "Bluetooth: поиск устройств рядом включён · этот компьютер другим пока не виден": "Bluetooth: buscando dispositivos cercanos · este ordenador aún no es visible para otros",
+  "Bluetooth: поиск устройств рядом включён": "Bluetooth: buscando dispositivos cercanos",
   "Bluetooth: поиск включён, ваш профиль виден рядом": "Búsqueda Bluetooth activa · perfil visible cerca",
   "Bluetooth · поиск: {} · объявление: {}": "Bluetooth · búsqueda: {} · anuncio: {}",
   "запуск": "iniciando",

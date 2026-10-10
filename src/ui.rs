@@ -1106,6 +1106,10 @@ impl Drop for TerminalGuard {
 pub(crate) fn picture_picker(ascii: bool) -> Picker {
     // Querying stdin here consumed early keystrokes in terminals without replies.
     // Use known graphics protocols; other terminals get background-cell portraits.
+    #[cfg(windows)]
+    if !ascii {
+        return crate::display::windows_picker();
+    }
     let mut picker = Picker::halfblocks();
     if !ascii {
         picker.set_protocol_type(crate::display::Display::detect().images);
@@ -2060,10 +2064,10 @@ pub fn bluetooth_status(snapshot: &Value) -> String {
     if scan.contains("adapter not found") || advertise == "unsupported" {
         return t("Bluetooth-адаптер не найден · доступна переписка через релей").into();
     }
-    // Windows and Linux find nearby devices but cannot be found yet.
+    // Windows and Linux only scan; a device that advertises connects both ways.
     if advertise.contains("not available on this platform") {
         return if scan == "scanning" {
-            t("Bluetooth: поиск устройств рядом включён · этот компьютер другим пока не виден")
+            t("Bluetooth: поиск устройств рядом включён")
         } else {
             t("Bluetooth: запускается поиск устройств рядом…")
         }

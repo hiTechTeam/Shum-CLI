@@ -33,13 +33,21 @@ pub struct Display {
 }
 impl Display {
     pub fn detect() -> Self {
-        Self::for_terminal(
+        #[cfg_attr(not(windows), allow(unused_mut))]
+        let mut display = Self::for_terminal(
             &std::env::var("TERM_PROGRAM").unwrap_or_default(),
             &std::env::var("TERM").unwrap_or_default(),
             &std::env::var("COLORTERM").unwrap_or_default(),
             std::env::var_os("KITTY_WINDOW_ID").is_some(),
             std::env::var_os("WT_SESSION").is_some(),
-        )
+        );
+        // Every Windows 10+ console renders RGB; images depend on the console.
+        #[cfg(windows)]
+        {
+            display.colors = Colors::Rgb;
+            display.images = windows_picker().protocol_type();
+        }
+        display
     }
 
     pub fn for_terminal(
@@ -78,6 +86,21 @@ impl Display {
             direct_images: program == "WarpTerminal",
         }
     }
+}
+
+/// Windows Terminal opened as the default console host has no WT_SESSION, so
+/// Windows asks the console for its graphics support and cell size instead of
+/// guessing from the environment. Windows consoles always answer, so the query
+/// cannot swallow keystrokes the way it can in silent Unix terminals.
+#[cfg(windows)]
+pub fn windows_picker() -> ratatui_image::picker::Picker {
+    static PICKER: std::sync::OnceLock<ratatui_image::picker::Picker> = std::sync::OnceLock::new();
+    PICKER
+        .get_or_init(|| {
+            ratatui_image::picker::Picker::from_query_stdio()
+                .unwrap_or_else(|_| ratatui_image::picker::Picker::halfblocks())
+        })
+        .clone()
 }
 
 impl Colors {

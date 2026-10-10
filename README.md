@@ -72,7 +72,7 @@ In a chat, `/language en` changes and saves the language immediately. `/language
 
 Priority: `--lang`, `SHUM_LANG`, saved setting, system locale. The system locale uses `LC_ALL`, then `LC_MESSAGES`, then `LANG`; if none are set, macOS preferred languages are used. Unsupported locales and `C`/`POSIX` use English. Chinese locales map to Simplified Chinese; Portuguese locales use Brazilian Portuguese. Settings are stored in `cli-settings.json` in the data directory, without creating a profile. Commands, IDs, JSON field names and your messages stay unchanged. System and dependency diagnostics may remain in their original language. Arabic text shaping depends on the terminal; the interface keeps its column order.
 
-### Windows (preview 0.1.0)
+### Windows (preview 0.1.1)
 
 Shum for Windows has its own version line, starting at 0.1.0. Windows 10 and 11, x64 and ARM64. In PowerShell, install or update with:
 
