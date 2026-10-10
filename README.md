@@ -6,7 +6,7 @@ Terminal client for Shum, built on [Shum Core](https://github.com/hiTechTeam/Shu
 
 ## Install
 
-Current release: **0.1.8 preview (Homebrew 0.1.8_1), macOS 15+, Apple Silicon and Intel**.
+Current release: **0.1.9 preview, macOS 15+, Apple Silicon and Intel**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -72,7 +72,7 @@ In a chat, `/language en` changes and saves the language immediately. `/language
 
 Priority: `--lang`, `SHUM_LANG`, saved setting, system locale. The system locale uses `LC_ALL`, then `LC_MESSAGES`, then `LANG`; if none are set, macOS preferred languages are used. Unsupported locales and `C`/`POSIX` use English. Chinese locales map to Simplified Chinese; Portuguese locales use Brazilian Portuguese. Settings are stored in `cli-settings.json` in the data directory, without creating a profile. Commands, IDs, JSON field names and your messages stay unchanged. System and dependency diagnostics may remain in their original language. Arabic text shaping depends on the terminal; the interface keeps its column order.
 
-### Windows (preview 0.1.3)
+### Windows (preview 0.1.4)
 
 Shum for Windows has its own version line, starting at 0.1.0. Windows 10 and 11, x64 and ARM64. In PowerShell, install or update with:
 
@@ -81,6 +81,17 @@ irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1 | iex
 ```
 
 The script picks the build for your processor, checks SHA-256, installs `shum.exe` in `%LOCALAPPDATA%\Programs\Shum` and adds it to your user PATH. Builds are cross-compiled on macOS (`scripts/package_windows.sh`) and are not code-signed. They have not been run on Windows hardware yet. Bluetooth only discovers nearby devices so far; other devices cannot find a Windows computer, and computers without Bluetooth chat over the internet.
+
+## Backup
+
+A backup moves a profile to another computer or brings it back. The file is protected by a password of at least 10 characters; keep the file and the password apart. Backups use the shared format of protocol section 13, so other Shum clients restore them too.
+
+```sh
+shum backup create ~/Shum-backup.shumbackup
+shum backup restore ~/Shum-backup.shumbackup
+```
+
+Restoring creates a new profile with the same Shum ID. If that profile is already on this computer, add `--replace`. For scripts, `--password-stdin` reads the password from the first line of standard input. A backup is for moving a profile, not for using it on two devices at once.
 
 ## Uninstall
 

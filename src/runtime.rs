@@ -26,7 +26,7 @@ use tokio::{
     task::JoinSet,
 };
 
-pub const COMMAND_SCHEMA_VERSION: u64 = 2;
+pub const COMMAND_SCHEMA_VERSION: u64 = 3;
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -87,6 +87,11 @@ fn wrap(key: &Secret32, recipient: &str, content: String) -> Result<nostr::Event
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Request {
     Snapshot,
+    /// Seal the profile into a backup file (protocol section 13).
+    Backup {
+        password: String,
+        created_at: String,
+    },
     Add {
         link: String,
     },
@@ -419,6 +424,16 @@ impl Runtime {
     fn command(&mut self, request: Request) -> Result<Value> {
         match request {
             Request::Snapshot => return Ok(self.snapshot()),
+            Request::Backup {
+                password,
+                created_at,
+            } => {
+                let password = zeroize::Zeroizing::new(password);
+                let file = shum_store::backup::export(&self.profile, &password, &created_at)?;
+                return Ok(
+                    json!({ "file": base64::engine::general_purpose::STANDARD.encode(file) }),
+                );
+            }
             Request::Add { link } => match invitation::parse(&link)? {
                 Invitation::Card(card) => {
                     let id = card.id();

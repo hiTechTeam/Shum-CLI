@@ -367,6 +367,16 @@ fn draw_security(
                 .min(width.saturating_sub(1)),
             area.y + y + 8,
         ));
+        if y + 11 < area.height.saturating_sub(3) {
+            frame.render_widget(
+                Paragraph::new(t(
+                    "Есть резервная копия? Esc, затем shum backup restore <файл>",
+                ))
+                .style(muted)
+                .wrap(Wrap { trim: false }),
+                Rect::new(x, area.y + y + 10, width, 2),
+            );
+        }
     }
     if !error.is_empty() {
         frame.render_widget(

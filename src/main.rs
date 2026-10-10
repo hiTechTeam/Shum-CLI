@@ -89,6 +89,11 @@ enum Commands {
     },
     #[command(about = t("Список контактов и их Shum ID"))]
     Contacts,
+    #[command(about = t("Резервная копия профиля: создать или восстановить"))]
+    Backup {
+        #[command(subcommand)]
+        command: BackupCommand,
+    },
     #[command(about = t("Принять приглашение в чат"))]
     Accept {
         #[arg(value_name = "ID")]
@@ -185,6 +190,23 @@ enum Commands {
     },
 }
 #[derive(Subcommand)]
+enum BackupCommand {
+    #[command(about = t("Сохранить выбранный профиль в файл"))]
+    Create {
+        file: PathBuf,
+        #[arg(long, help = t("Прочитать пароль из первой строки стандартного ввода"))]
+        password_stdin: bool,
+    },
+    #[command(about = t("Восстановить профиль из файла"))]
+    Restore {
+        file: PathBuf,
+        #[arg(long, help = t("Заменить профиль с тем же Shum ID на этом устройстве"))]
+        replace: bool,
+        #[arg(long, help = t("Прочитать пароль из первой строки стандартного ввода"))]
+        password_stdin: bool,
+    },
+}
+#[derive(Subcommand)]
 enum ProfileCommand {
     List,
     Use {
@@ -228,6 +250,24 @@ fn output(value: Value, json_mode: bool, plain: &str) -> Result<()> {
         println!("{plain}");
     }
     Ok(())
+}
+fn backup_password(from_stdin: bool, confirm: bool) -> Result<zeroize::Zeroizing<String>> {
+    if from_stdin {
+        let mut line = zeroize::Zeroizing::new(String::new());
+        io::stdin().read_line(&mut line)?;
+        return Ok(zeroize::Zeroizing::new(
+            line.trim_end_matches(['\r', '\n']).to_owned(),
+        ));
+    }
+    let password = terminal::secret(t("Пароль для резервной копии: "))?;
+    if confirm {
+        shum_store::backup::check_password(&password)
+            .map_err(|_| anyhow::anyhow!("{}", t("Пароль: не короче 10 символов")))?;
+        if *terminal::secret(t("Повторите пароль: "))? != *password {
+            bail!("{}", t("Пароли не совпали"));
+        }
+    }
+    Ok(password)
 }
 fn root(args: &Args) -> Result<PathBuf> {
     if let Some(path) = &args.data_dir {
@@ -527,6 +567,73 @@ async fn run(args: Args) -> Result<()> {
             &palette.paint(Tone::Accent, t("Профиль удалён")),
         );
     }
+    if let Some(Commands::Backup {
+        command:
+            BackupCommand::Restore {
+                file,
+                replace,
+                password_stdin,
+            },
+    }) = &args.command
+    {
+        let bytes = std::fs::read(file)?;
+        let summary = shum_store::backup::summary(&bytes).map_err(|_| {
+            anyhow::anyhow!("{}", t("Это не резервная копия Shum или файл повреждён"))
+        })?;
+        if !args.json {
+            println!(
+                "{}",
+                i18n::format(
+                    "Профиль «{}», копия от {}",
+                    &[
+                        ("0", terminal::safe(&summary.profile_name).to_string()),
+                        ("1", summary.created_at.chars().take(10).collect()),
+                    ],
+                )
+            );
+            println!(
+                "{}",
+                palette.paint(
+                    Tone::Muted,
+                    t("Копия переносит профиль. Если он ещё открыт на другом устройстве, у двух устройств будут одни и те же ключи.")
+                )
+            );
+        }
+        let password = backup_password(*password_stdin, false)?;
+        if *replace {
+            // Services of the identity being replaced must release its database.
+            let owner = shum_core::backup::open(&bytes, &password)
+                .map_err(|_| anyhow::anyhow!("{}", t("Неверный пароль или файл повреждён")))?
+                .profile
+                .owner_id;
+            for old in profiles.list()?.1.iter().filter(|p| p.owner_id == owner) {
+                ipc::stop(&root, &old.id).await?;
+            }
+        }
+        let restored = shum_store::backup::restore(&profiles, &bytes, &password, KeyMode::Auto, *replace)
+            .map_err(|error| match error {
+                shum_store::Error::Core(shum_core::Error::Authentication) => {
+                    anyhow::anyhow!("{}", t("Неверный пароль или файл повреждён"))
+                }
+                shum_store::Error::ProfileExists => anyhow::anyhow!(
+                    "{}",
+                    t("Этот профиль уже есть на устройстве. Чтобы заменить его копией, добавьте --replace")
+                ),
+                other => other.into(),
+            })?;
+        profiles.select(&restored.id)?;
+        return output(
+            json!({"restored":restored.id,"name":restored.name,"ownerID":restored.owner_id}),
+            args.json,
+            &palette.paint(
+                Tone::Accent,
+                i18n::format(
+                    "Профиль {} восстановлен. Запуск: shum",
+                    &[("0", terminal::safe(&restored.name).to_string())],
+                ),
+            ),
+        );
+    }
     let profile = ipc::select(&profiles, args.profile.as_deref())?;
     if let Some(Commands::Daemon { run: true, .. }) = &args.command {
         return ipc::serve(&root, &profile.id).await;
@@ -607,6 +714,54 @@ async fn run(args: Args) -> Result<()> {
             Ok(())
         })?;
         drop(open);
+    }
+    if let Some(Commands::Backup {
+        command: BackupCommand::Create {
+            file,
+            password_stdin,
+        },
+    }) = &args.command
+    {
+        if file.exists() {
+            bail!("{}", t("Файл уже существует, выберите другое имя"));
+        }
+        let password = backup_password(*password_stdin, !*password_stdin)?;
+        shum_store::backup::check_password(&password)
+            .map_err(|_| anyhow::anyhow!("{}", t("Пароль: не короче 10 символов")))?;
+        ipc::ensure(&root, &profile.id).await?;
+        let reply = ipc::request(
+            &root,
+            &profile.id,
+            Request::Backup {
+                password: password.to_string(),
+                created_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            },
+        )
+        .await?;
+        use base64::Engine as _;
+        let bytes =
+            base64::engine::general_purpose::STANDARD.decode(terminal::text(&reply["file"]))?;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut out = options.open(file)?;
+        out.write_all(&bytes)?;
+        out.sync_all()?;
+        return output(
+            json!({"file":file,"bytes":bytes.len()}),
+            args.json,
+            &palette.paint(
+                Tone::Accent,
+                i18n::format(
+                    "Резервная копия сохранена: {}. Храните файл и пароль отдельно.",
+                    &[("0", file.display().to_string())],
+                ),
+            ),
+        );
     }
     ipc::ensure(&root, &profile.id).await?;
     let request = match &args.command {

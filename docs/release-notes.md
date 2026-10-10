@@ -1,3 +1,22 @@
+# Shum CLI 0.1.9 · 11 October 2026
+
+* Profile backups: `shum backup create <file>` saves the selected profile to a password-protected file, `shum backup restore <file>` brings it back as a new profile with the same Shum ID. The format is protocol section 13, shared by all Shum clients through Shum-Core.
+* The first-run profile screen points to `shum backup restore` for people who already have a backup.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.4 carries the same change.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Резервные копии профиля: `shum backup create <файл>` сохраняет выбранный профиль в файл с паролем, `shum backup restore <файл>` возвращает его как новый профиль с тем же Shum ID. Формат описан в разделе 13 протокола и общий для всех клиентов через Shum-Core.
+* Экран создания профиля при первом запуске подсказывает `shum backup restore` тем, у кого уже есть копия.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.4 то же изменение.
+
 # Shum CLI 0.1.8 · package revision 1
 
 * Avatars and reaction icons remain visible outside every menu, including profiles, help, QR and confirmation dialogs.

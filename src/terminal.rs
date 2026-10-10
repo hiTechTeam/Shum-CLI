@@ -199,6 +199,45 @@ pub fn decode_qr(path: &Path) -> Result<String> {
         _ => bail!("{}", t("На изображении несколько приглашений Shum")),
     }
 }
+/// Reads a password without echo. Esc or Ctrl+C cancels.
+pub fn secret(label: &str) -> Result<zeroize::Zeroizing<String>> {
+    use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+    if !io::stdin().is_terminal() {
+        bail!(
+            "{}",
+            t("Пароль вводится в терминале или через --password-stdin")
+        );
+    }
+    print!("{label}");
+    io::stdout().flush()?;
+    crossterm::terminal::enable_raw_mode()?;
+    let result = (|| {
+        let mut value = zeroize::Zeroizing::new(String::new());
+        loop {
+            let Event::Key(key) = event::read()? else {
+                continue;
+            };
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            match key.code {
+                KeyCode::Enter => return Ok(value),
+                KeyCode::Backspace => {
+                    value.pop();
+                }
+                KeyCode::Esc => bail!("{}", t("Отменено")),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    bail!("{}", t("Отменено"))
+                }
+                KeyCode::Char(c) => value.push(c),
+                _ => {}
+            }
+        }
+    })();
+    crossterm::terminal::disable_raw_mode()?;
+    println!();
+    result
+}
 pub fn prompt(label: &str) -> Result<String> {
     print!("{label}");
     io::stdout().flush()?;
