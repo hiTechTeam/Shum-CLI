@@ -572,7 +572,8 @@ fn draw_content(
                 t("Приглашение: Enter").into()
             } else if c["phase"] == "declinedLocally" {
                 t("Вы отклонили приглашение.").into()
-            } else if c["typing"] == true {
+            } else if c["typing"] == true && ascii {
+                // Without graphics the pulsing mark cannot be drawn: say it.
                 t("печатает…").into()
             } else if view.tab == 1 {
                 nearby_label(c)
@@ -587,13 +588,32 @@ fn draw_content(
             );
             frame.render_widget(
                 Paragraph::new(vec![
-                    Line::from(Span::styled(
-                        trim_width(&name, text_area.width as usize),
-                        if active { style } else { Style::default() },
-                    )),
+                    {
+                        // The "in chat" mark sits after the name; it pulses while they type.
+                        let mark = (!ascii
+                            && c["phase"] == "accepted"
+                            && (c["online"] == true || c["typing"] == true))
+                            .then(|| presence_mark(text(&c["id"]), c["typing"] == true));
+                        let room = (text_area.width as usize).saturating_sub(if mark.is_some() {
+                            3
+                        } else {
+                            0
+                        });
+                        let mut spans = vec![Span::styled(
+                            trim_width(&name, room),
+                            if active { style } else { Style::default() },
+                        )];
+                        if let Some(mark) = mark {
+                            spans.push(Span::styled(
+                                format!(" {mark}"),
+                                Style::default().fg(accent),
+                            ));
+                        }
+                        Line::from(spans)
+                    },
                     Line::from(Span::styled(
                         trim_width(&preview, text_area.width as usize),
-                        Style::default().fg(if c["typing"] == true { accent } else { muted }),
+                        Style::default().fg(muted),
                     )),
                 ])
                 .style(row_style),
@@ -694,26 +714,38 @@ fn draw_content(
                 }
             }
             let x = if show_avatar { avatar_width + 1 } else { 0 };
-            let phase = if card["typing"] == true {
-                t("печатает…")
-            } else if card["phase"] != "accepted" {
+            // Typing shows as the pulsing mark only, as in the iOS app.
+            let in_chat =
+                card["phase"] == "accepted" && (card["online"] == true || card["typing"] == true);
+            let phase = if card["phase"] != "accepted" {
                 crate::invitations::hint(text(&card["phase"]))
-            } else if card["online"] == true {
+            } else if in_chat {
                 t("в чате")
             } else {
                 t("сквозное шифрование")
             };
+            let mut status = Vec::new();
+            if in_chat && !ascii {
+                status.push(Span::styled(
+                    format!(
+                        "{} ",
+                        presence_mark(text(&card["id"]), card["typing"] == true)
+                    ),
+                    Style::default().fg(GREEN),
+                ));
+            }
+            status.push(Span::styled(
+                if card["nearby"] == true {
+                    format!("{} · {phase}", nearby_label(card))
+                } else {
+                    phase.into()
+                },
+                Style::default().fg(muted),
+            ));
             frame.render_widget(
                 Paragraph::new(vec![
                     Line::from(Span::styled(title.clone(), style)),
-                    Line::from(Span::styled(
-                        if card["nearby"] == true {
-                            format!("{} · {phase}", nearby_label(card))
-                        } else {
-                            phase.into()
-                        },
-                        Style::default().fg(muted),
-                    )),
+                    Line::from(status),
                     Line::from(safe(text(&card["card"]["bio"]))),
                 ])
                 .wrap(Wrap { trim: false }),
@@ -2127,6 +2159,51 @@ pub fn bluetooth_status(snapshot: &Value) -> String {
             ),
         ],
     )
+}
+
+/// The "in chat" mark: Shum-Core's 3x3 pattern as two braille characters.
+/// While the contact types, random dots light up every 180 ms, as in iOS.
+fn presence_mark(seed: &str, typing: bool) -> String {
+    let lit = if typing {
+        let step = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            / 180;
+        let mut hash = DefaultHasher::new();
+        (seed, step).hash(&mut hash);
+        let mut bits = hash.finish();
+        let mut cells = [false; 9];
+        for cell in cells.iter_mut() {
+            *cell = bits & 1 == 1;
+            bits >>= 1;
+        }
+        if !cells.contains(&true) {
+            cells[(bits % 9) as usize] = true;
+        }
+        cells
+    } else {
+        shum_core::presence::pattern(seed)
+    };
+    // Braille dots 1-3 are the left column top to bottom, 4-6 the right one.
+    const LEFT: [u32; 3] = [0x01, 0x02, 0x04];
+    const RIGHT: [u32; 3] = [0x08, 0x10, 0x20];
+    let (mut first, mut second) = (0x2800, 0x2800);
+    for row in 0..3 {
+        if lit[row * 3] {
+            first |= LEFT[row];
+        }
+        if lit[row * 3 + 1] {
+            first |= RIGHT[row];
+        }
+        if lit[row * 3 + 2] {
+            second |= LEFT[row];
+        }
+    }
+    [first, second]
+        .into_iter()
+        .filter_map(char::from_u32)
+        .collect()
 }
 
 pub fn nearby_label(contact: &Value) -> String {

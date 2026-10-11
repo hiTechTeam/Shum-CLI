@@ -1,3 +1,24 @@
+# Shum CLI 0.1.11 · 11 October 2026
+
+* "In chat" mark, as in the iOS app: a 3x3 pixel grid next to the name in the chat list and before the status in the chat header. It pulses while the contact types; in ASCII mode the word "typing…" stays.
+* Distance nearby on both sides: the device that measures the Bluetooth signal now shares its reading, so a Mac that a peer connected to also shows "~N m" (protocol section 06, signal report).
+* New profiles are created by Shum-Core, the same way as in the desktop app.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.6 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Знак «в чате», как в приложении для iPhone: сетка 3×3 пикселя рядом с именем в списке чатов и перед подписью в шапке чата. Пока собеседник печатает, она шевелится; в режиме ASCII остаётся слово «печатает…».
+* Расстояние «рядом» видно с обеих сторон: устройство, которое измеряет сигнал Bluetooth, теперь сообщает замер соседу, поэтому Mac, к которому подключились, тоже показывает «~N м» (раздел 06 протокола, отчёт о сигнале).
+* Новые профили создаёт Shum-Core, так же как в приложении для компьютера.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.6 те же изменения.
+
 # Shum CLI 0.1.10 · 11 October 2026
 
 * The CLI works alongside the Shum desktop app: when the app has a profile open, the CLI joins it instead of restarting it.

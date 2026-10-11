@@ -207,12 +207,22 @@ fn chat_scroll_reverses_immediately_at_the_top_and_after_resize() {
                 terminal
                     .draw(|f| draw(f, &data, view, pictures, false))
                     .unwrap();
+                // The typing mark pulses between frames; this test compares layout.
                 terminal
                     .backend()
                     .buffer()
                     .content
                     .iter()
                     .map(|c| c.symbol())
+                    .collect::<String>()
+                    .chars()
+                    .map(|c| {
+                        if ('\u{2800}'..='\u{28ff}').contains(&c) {
+                            '⠿'
+                        } else {
+                            c
+                        }
+                    })
                     .collect::<String>()
             };
         let bottom = render(&mut terminal, &mut view, &mut pictures);
@@ -503,7 +513,18 @@ fn chat_list_typing_is_visible_and_restores_the_preview() {
                     .iter()
                     .map(|c| c.symbol())
                     .collect::<String>();
-                assert_eq!(screen.contains("печатает…"), typing);
+                // With graphics typing is the pulsing braille mark, as in iOS;
+                // in ASCII it stays a word.
+                let marked = screen
+                    .chars()
+                    .any(|c| ('\u{2801}'..='\u{28ff}').contains(&c));
+                if ascii {
+                    assert_eq!(screen.contains("печатает…"), typing);
+                    assert!(!marked, "ASCII mode draws no braille");
+                } else if typing {
+                    assert!(marked, "the typing mark must be drawn");
+                    assert!(!screen.contains("печатает…"));
+                }
                 assert!(
                     screen.contains("Аня (1)"),
                     "unread badge must remain while typing"
