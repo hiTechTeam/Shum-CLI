@@ -320,5 +320,7 @@
   "Этот профиль уже есть на устройстве. Чтобы заменить его копией, добавьте --replace": "Este perfil já está neste dispositivo. Para substituí-lo pelo backup, adicione --replace",
   "Профиль {} восстановлен. Запуск: shum": "Perfil {} restaurado. Inicie: shum",
   "Файл уже существует, выберите другое имя": "O arquivo já existe, escolha outro nome",
-  "Резервная копия сохранена: {}. Храните файл и пароль отдельно.": "Backup salvo: {}. Guarde o arquivo e a senha separadamente."
+  "Резервная копия сохранена: {}. Храните файл и пароль отдельно.": "Backup salvo: {}. Guarde o arquivo e a senha separadamente.",
+  "Обновите CLI: профиль открыт в более новом приложении Shum.": "Atualize o CLI: o perfil está aberto em um app Shum mais recente",
+  "Профиль открыт в старом приложении Shum. Обновите приложение или закройте его.": "O perfil está aberto em um app Shum antigo. Atualize o app ou feche-o"
 }

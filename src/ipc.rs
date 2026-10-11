@@ -36,11 +36,34 @@ pub fn select(profiles: &Profiles, selector: Option<&str>) -> Result<Profile> {
 pub async fn request(root: &Path, id: &str, request: Request) -> Result<Value> {
     service::request(root, id, request).await.map_err(worded)
 }
+/// The `owner` a service reports. Services before this field were the CLI's.
+const CLI_OWNER: &str = "cli";
+fn owner(snapshot: &Value) -> &str {
+    snapshot["owner"].as_str().unwrap_or(CLI_OWNER)
+}
+/// Another Shum app owns the profile: join it while the command contract
+/// matches and never restart it, so its window keeps working.
+fn join(snapshot: &Value) -> Result<()> {
+    match snapshot["clientCommandVersion"].as_u64() {
+        Some(version) if version == crate::runtime::COMMAND_SCHEMA_VERSION => Ok(()),
+        Some(version) if version > crate::runtime::COMMAND_SCHEMA_VERSION => bail!(
+            "{}",
+            t("Обновите CLI: профиль открыт в более новом приложении Shum.")
+        ),
+        _ => bail!(
+            "{}",
+            t("Профиль открыт в старом приложении Shum. Обновите приложение или закройте его.")
+        ),
+    }
+}
 pub async fn ensure(root: &Path, id: &str) -> Result<()> {
     let _control = crate::service::control_lock(root).await?;
     let own = crate::identity::current()?.clone();
     let snapshot = request(root, id, Request::Snapshot).await.ok();
     if let Some(snapshot) = &snapshot {
+        if owner(snapshot) != CLI_OWNER {
+            return join(snapshot);
+        }
         if snapshot["clientCommandVersion"] == crate::runtime::COMMAND_SCHEMA_VERSION
             && crate::identity::matches(snapshot, &own)
         {
@@ -125,6 +148,10 @@ pub async fn ensure(root: &Path, id: &str) -> Result<()> {
     let startup_seconds = if cfg!(target_os = "macos") { 60 } else { 10 };
     for _ in 0..startup_seconds * 10 {
         if let Ok(snapshot) = request(root, id, Request::Snapshot).await {
+            // The app may have opened the profile while this service started.
+            if owner(&snapshot) != CLI_OWNER {
+                return join(&snapshot);
+            }
             if snapshot["clientCommandVersion"] == crate::runtime::COMMAND_SCHEMA_VERSION
                 && crate::identity::matches(&snapshot, &build)
             {
@@ -170,6 +197,7 @@ async fn shutdown_signal() {
 }
 pub async fn serve(root: &Path, id: &str) -> Result<()> {
     let mut client = serde_json::Map::new();
+    client.insert("owner".into(), serde_json::json!(CLI_OWNER));
     client.insert("version".into(), serde_json::json!(env!("SHUM_VERSION")));
     client.insert(
         "build".into(),

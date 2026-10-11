@@ -1,3 +1,22 @@
+# Shum CLI 0.1.10 · 11 October 2026
+
+* The CLI works alongside the Shum desktop app: when the app has a profile open, the CLI joins it instead of restarting it.
+* Avatars and reaction pictures now come from Shum-Core, so every Shum client draws them the same way.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.5 carries the same change.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* CLI работает вместе с приложением Shum для компьютера: если профиль открыт в приложении, CLI подключается к нему и не перезапускает его.
+* Аватарки и картинки реакций теперь рисует Shum-Core, поэтому во всех клиентах Shum они одинаковые.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.5 то же изменение.
+
 # Shum CLI 0.1.9 · 11 October 2026
 
 * Profile backups: `shum backup create <file>` saves the selected profile to a password-protected file, `shum backup restore <file>` brings it back as a new profile with the same Shum ID. The format is protocol section 13, shared by all Shum clients through Shum-Core.
