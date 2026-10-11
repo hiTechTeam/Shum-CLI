@@ -1,11 +1,11 @@
-//! First-run presentation and profile creation stay in the client.
+//! First-run presentation. Profile creation itself is Shum-Core's.
 use crate::i18n::t;
 use crate::{
     display::{ACCENT as GREEN, MUTED},
     terminal::{safe, text},
     ui::Pictures,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
     layout::Rect,
@@ -15,11 +15,7 @@ use ratatui::{
     Frame,
 };
 use serde_json::{json, Value};
-use shum_core::card::Card;
-use shum_store::{
-    profiles::{Profile, Profiles},
-    vault::{KeyMode, ProfileKeys},
-};
+use shum_store::vault::{KeyMode, ProfileKeys};
 use std::{
     path::Path,
     time::{Duration, Instant},
@@ -31,10 +27,6 @@ pub use animation::CreationAnimation;
 /// Like iOS registration, choose the first portrait from the profile's public
 /// signing key. The selected seed is explicit in the signed transport card;
 /// Core's legacy default for cards without a selected seed remains unchanged.
-pub fn initial_seed(keys: &ProfileKeys) -> u64 {
-    shum_core::crypto::avatar_seed(&keys.signing.ed_public())
-}
-
 fn security_steps() -> [&'static str; 4] {
     [
         t("Криптографические ключи"),
@@ -44,109 +36,19 @@ fn security_steps() -> [&'static str; 4] {
     ]
 }
 
-/// Prepare and check security before asking for a name. Temporary encrypted
-/// storage is removed before returning; secrets stay in memory until the user
-/// confirms the profile. No provisional profile is published in the registry.
-pub fn prepare(root: &Path, mut progress: impl FnMut(usize)) -> Result<ProfileKeys> {
-    progress(0);
-    let keys = ProfileKeys::generate()?;
-    progress(1);
-    let mut nonce = [0; 12];
-    getrandom::fill(&mut nonce)?;
-    let challenge = b"shum.registration.check.v1";
-    let encrypted = shum_store::codec::seal(keys.storage.expose(), &nonce, challenge, b"")?;
-    ensure!(
-        shum_store::codec::open(keys.storage.expose(), &encrypted, b"")?.as_slice() == challenge,
+/// Profile creation lives in Shum-Core; the CLI words its errors.
+fn worded(error: anyhow::Error) -> anyhow::Error {
+    anyhow::anyhow!(
         "{}",
-        t("Не прошла проверка шифрования")
-    );
-    progress(2);
-    Profiles::new(root)?;
-    let temporary = tempfile::Builder::new()
-        .prefix(".registration-")
-        .tempdir_in(root)?;
-    let database = temporary.path().join("check.sqlite");
-    let card = Card::create(
-        &keys.noise,
-        &keys.signing,
-        &keys.nostr,
-        t("Подготовка").into(),
-        "",
-        Some(0),
-        1,
-    )?;
-    let mut store = shum_store::Store::open(&database, &keys.owner_id(), keys.storage_key())?;
-    store.transaction(|state| {
-        state["ownProfileCard"] = serde_json::to_value(&card)?;
-        Ok(())
-    })?;
-    store.checkpoint()?;
-    drop(store);
-    progress(3);
-    let reopened = shum_store::Store::open(&database, &keys.owner_id(), keys.storage_key())?;
-    let stored: Card = serde_json::from_value(reopened.state()["ownProfileCard"].clone())?;
-    stored.validate()?;
-    ensure!(
-        stored == card,
-        "{}",
-        t("Не прошла проверка защищённого хранилища")
-    );
-    ensure!(
-        shum_core::crypto::verify_ed(
-            &keys.signing.ed_public(),
-            &keys.signing.sign(challenge),
-            challenge
-        ),
-        "{}",
-        t("Не прошла проверка ключа профиля")
-    );
-    drop(reopened);
-    temporary.close()?;
-    progress(4);
-    Ok(keys)
+        crate::runtime::describe(&crate::runtime::Failure::from_error(error))
+    )
 }
-
-#[derive(Clone)]
-pub struct Settings {
-    pub bluetooth: bool,
-    pub relays: Vec<String>,
-    pub push_url: Option<String>,
-}
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            bluetooth: true,
-            relays: shum_transport_nostr::DEFAULT_RELAYS
-                .iter()
-                .map(|s| (*s).into())
-                .collect(),
-            push_url: Some("https://d5d5lr0h6812sbjiiqoa.ccx97b51.apigw.yandexcloud.net".into()),
-        }
-    }
-}
-impl Settings {
-    pub fn validate(&self) -> Result<()> {
-        shum_transport_nostr::RelayPool::validate_urls(&self.relays)?;
-        if let Some(url) = &self.push_url {
-            shum_transport_nostr::push::PushClient::new(url)?;
-        }
-        Ok(())
-    }
+pub use shum_session::registration::{initial_seed, Created, Settings};
+pub fn prepare(root: &Path, progress: impl FnMut(usize)) -> Result<ProfileKeys> {
+    shum_session::registration::prepare(root, progress).map_err(worded)
 }
 pub fn validate_name(name: &str) -> Result<()> {
-    ensure!(
-        !name.is_empty()
-            && name.len() <= 64
-            && name.trim() == name
-            && !name.chars().any(char::is_control),
-        "{}",
-        t("Имя: 1–64 байта UTF-8, без пробелов по краям (до 32 русских букв)")
-    );
-    Ok(())
-}
-pub struct Created {
-    pub profile: Profile,
-    pub card: Card,
+    shum_session::registration::validate_name(name).map_err(worded)
 }
 pub fn create(
     root: &Path,
@@ -156,59 +58,7 @@ pub fn create(
     settings: &Settings,
     keys: ProfileKeys,
 ) -> Result<Created> {
-    validate_name(name)?;
-    settings.validate()?;
-    let card = Card::create(
-        &keys.noise,
-        &keys.signing,
-        &keys.nostr,
-        name.into(),
-        "",
-        Some(seed.unwrap_or_else(|| initial_seed(&keys))),
-        1,
-    )?;
-    card.validate()?;
-    let profiles = Profiles::new(root)?;
-    let p = profiles.create_with_keys(name, mode, keys)?;
-    let save = (|| -> Result<()> {
-        let mut open = profiles.open(Some(&p.id))?;
-        open.store.transaction(|s| {
-            s["ownProfileCard"] = serde_json::to_value(&card)?;
-            s["cliSettings"] = json!({"relays":settings.relays,"pushURL":settings.push_url,"bluetooth":settings.bluetooth});
-            Ok(())
-        })?;
-        drop(open);
-        // Read back encrypted storage and verify the signed public card before reporting success.
-        let reopened = profiles.open(Some(&p.id))?;
-        let stored: Card =
-            serde_json::from_value(reopened.store.state()["ownProfileCard"].clone())?;
-        stored.validate()?;
-        ensure!(
-            stored == card && stored.id() == reopened.keys.owner_id(),
-            "{}",
-            t("Не прошла проверка сохранённого профиля")
-        );
-        drop(reopened);
-        profiles.select(&p.id)?;
-        Ok(())
-    })();
-    if let Err(error) = save {
-        if let Err(cleanup) = profiles.delete(&p.id) {
-            bail!(
-                "{}",
-                crate::i18n::format(
-                    "{error}; не удалось удалить незавершённый профиль {}: {cleanup}",
-                    &[
-                        ("error", format!("{}", error)),
-                        ("0", p.id.to_string()),
-                        ("cleanup", format!("{}", cleanup))
-                    ]
-                )
-            );
-        }
-        return Err(error);
-    }
-    Ok(Created { profile: p, card })
+    shum_session::registration::create(root, name, seed, mode, settings, keys).map_err(worded)
 }
 #[derive(Clone, Copy, PartialEq)]
 pub enum Step {
