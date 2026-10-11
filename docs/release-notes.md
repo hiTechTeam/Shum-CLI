@@ -1,3 +1,22 @@
+# Shum CLI 0.1.12 · 11 October 2026
+
+* One core for every Shum client: the profile session and the relay connections are now the same Shum-Core code in the CLI, the desktop app and the new browser version, Shum Web (app.getshum.tech).
+* Relays reconnect the same way everywhere: after a failed attempt Shum waits twice as long each time, up to a minute, and keeps up to 64 messages per relay while it is offline.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.7 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Одно ядро для всех клиентов Shum: сессия профиля и соединения с релеями теперь один и тот же код Shum-Core в CLI, приложении для компьютера и новой браузерной версии Shum Web (app.getshum.tech).
+* Релеи переподключаются везде одинаково: после неудачной попытки Shum ждёт каждый раз вдвое дольше, но не больше минуты, и держит до 64 сообщений на релей, пока тот недоступен.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.7 те же изменения.
+
 # Shum CLI 0.1.11 · 11 October 2026
 
 * "In chat" mark, as in the iOS app: a 3x3 pixel grid next to the name in the chat list and before the status in the chat header. It pulses while the contact types; in ASCII mode the word "typing…" stays.
