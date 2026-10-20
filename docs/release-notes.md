@@ -1,3 +1,22 @@
+# Shum CLI 0.1.13 · 20 October 2026
+
+* Shum-Core 6e41fbc, the same core as the desktop app 0.1.3, Shum Web and the iPhone app in development.
+* People met nearby over Bluetooth are kept in the profile the way the iPhone keeps them (24 hours), so a backup carries them between devices.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.8 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Shum-Core 6e41fbc, то же ядро, что в приложении для компьютера 0.1.3, Shum Web и разрабатываемой версии для iPhone.
+* Люди, встреченные рядом по Bluetooth, хранятся в профиле так же, как на iPhone (24 часа), поэтому резервная копия переносит их между устройствами.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.8 те же изменения.
+
 # Shum CLI 0.1.12 · 11 October 2026
 
 * One core for every Shum client: the profile session and the relay connections are now the same Shum-Core code in the CLI, the desktop app and the new browser version, Shum Web (app.getshum.tech).

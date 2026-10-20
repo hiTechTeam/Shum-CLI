@@ -808,6 +808,7 @@ async fn run(args: Args) -> Result<()> {
         Some(Commands::Send { contact, text }) => Request::Send {
             contact: contact.clone(),
             text: text.clone(),
+            reply: None,
         },
         Some(Commands::Read { contact }) => Request::Read {
             contact: contact.clone(),

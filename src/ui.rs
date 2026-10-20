@@ -1437,6 +1437,7 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         return Ok(Action::Request(Request::Send {
             contact: current.context(t("Сначала выберите чат"))?.into(),
             text: input.into(),
+            reply: None,
         }));
     }
     let words = shlex::split(input).context(t("Незакрытые кавычки"))?;
@@ -1462,7 +1463,7 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/add",link]=>Request::Add{link:(*link).into()},
         ["/add","--image",path]=>Request::Add{link:crate::terminal::decode_qr(Path::new(path))?},
         ["/open",who]=>return Ok(Action::Open(text(&find_contact(snapshot,who)?["id"]).into())),
-        ["/send",who,body @ ..] if !body.is_empty()=>Request::Send{contact:contact(Some(who))?,text:body.join(" ")},
+        ["/send",who,body @ ..] if !body.is_empty()=>Request::Send{contact:contact(Some(who))?,text:body.join(" "),reply:None},
         ["/block",who]=>Request::Block{contact:contact(Some(who))?,blocked:true},
         ["/block",who,"--undo"]=>Request::Block{contact:contact(Some(who))?,blocked:false},
         ["/cancel",message]=>Request::Cancel{message:(*message).into()},

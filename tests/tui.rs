@@ -338,7 +338,7 @@ fn slash_commands_respect_arguments_and_reject_typos() {
     );
     view.input = format!("/send {IGOR} \"Привет, мир!\"");
     assert!(
-        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Send{contact,text}) if contact==IGOR && text=="Привет, мир!")
+        matches!(handle_key(&mut view,&data,key(KeyCode::Enter)).unwrap(),Action::Request(Request::Send{contact,text,reply:None}) if contact==IGOR && text=="Привет, мир!")
     );
     for input in [
         "/add",
