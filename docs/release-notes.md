@@ -1,3 +1,24 @@
+# Shum CLI 0.1.14 · 23 October 2026
+
+* Push notifications go to the new service at push.getshum.tech, which also works behind a VPN. Profiles that stored the old address switch to it on their own.
+* An answer to an invitation wakes the contact's iPhone silently instead of showing another invitation notification.
+* Shum-Core 0f747a1, the same core as the desktop app 0.1.4 and Shum Web.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.9 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Push-уведомления идут в новый сервис push.getshum.tech, он работает и через VPN. Профили со старым адресом переключаются на него сами.
+* Ответ на приглашение будит iPhone собеседника тихо, без ещё одного уведомления о приглашении.
+* Shum-Core 0f747a1, то же ядро, что в приложении для компьютера 0.1.4 и Shum Web.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.9 те же изменения.
+
 # Shum CLI 0.1.13 · 20 October 2026
 
 * Shum-Core 6e41fbc, the same core as the desktop app 0.1.3, Shum Web and the iPhone app in development.
