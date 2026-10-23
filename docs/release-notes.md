@@ -1,3 +1,22 @@
+# Shum CLI 0.1.15 · 23 October 2026
+
+* Shum updates itself: the background service checks GitHub once a day and installs a new version the way Shum was installed (Homebrew or the install script), then restarts on it. `shum update` updates at once; `shum update --auto off` turns the background updates off.
+* Shum-Core 0f747a1, as in 0.1.14.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.10 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Shum обновляется сам: фоновая служба раз в сутки проверяет GitHub, ставит новую версию тем же способом, каким Shum был установлен (Homebrew или скрипт установки), и перезапускается на ней. `shum update` обновляет сразу, `shum update --auto off` выключает обновление в фоне.
+* Shum-Core 0f747a1, как в 0.1.14.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.10 те же изменения.
+
 # Shum CLI 0.1.14 · 23 October 2026
 
 * Push notifications go to the new service at push.getshum.tech, which also works behind a VPN. Profiles that stored the old address switch to it on their own.
