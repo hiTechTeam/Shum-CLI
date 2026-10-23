@@ -188,6 +188,11 @@ enum Commands {
         #[arg(long, hide = true, conflicts_with = "uninstall")]
         refresh: bool,
     },
+    #[command(about = t("Обновить Shum до последней версии"))]
+    Update {
+        #[arg(long, value_parser = ["on", "off"], help = t("Автообновление в фоне: on или off"))]
+        auto: Option<String>,
+    },
 }
 #[derive(Subcommand)]
 enum BackupCommand {
@@ -395,6 +400,34 @@ async fn run(args: Args) -> Result<()> {
                 },
             ),
         );
+    }
+    if let Some(Commands::Update { auto }) = &args.command {
+        use shum_cli::update;
+        if let Some(mode) = auto {
+            let on = mode == "on";
+            update::set_auto(&root, on)?;
+            let text = if on {
+                "Автообновление включено"
+            } else {
+                "Автообновление выключено"
+            };
+            return output(json!({ "auto": on }), args.json, t(text));
+        }
+        return match update::update_now()? {
+            Some(version) => output(
+                json!({ "updated": version }),
+                args.json,
+                &i18n::format("Shum обновлён до {}", &[("0", version.clone())]),
+            ),
+            None => output(
+                json!({ "updated": null, "version": update::VERSION }),
+                args.json,
+                &i18n::format(
+                    "У вас последняя версия {}",
+                    &[("0", update::VERSION.into())],
+                ),
+            ),
+        };
     }
     if matches!(args.command, Some(Commands::Daemon { refresh: true, .. })) {
         let result = shum_cli::service::refresh(&root, args.data_dir.is_none()).await?;
@@ -636,6 +669,7 @@ async fn run(args: Args) -> Result<()> {
     }
     let profile = ipc::select(&profiles, args.profile.as_deref())?;
     if let Some(Commands::Daemon { run: true, .. }) = &args.command {
+        shum_cli::update::watch(root.clone());
         return ipc::serve(&root, &profile.id).await;
     }
     if matches!(args.command, Some(Commands::Lock)) {

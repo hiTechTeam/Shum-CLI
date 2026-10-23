@@ -322,5 +322,12 @@
   "Файл уже существует, выберите другое имя": "El archivo ya existe, elige otro nombre",
   "Резервная копия сохранена: {}. Храните файл и пароль отдельно.": "Copia guardada: {}. Guarda el archivo y la contraseña por separado.",
   "Обновите CLI: профиль открыт в более новом приложении Shum.": "Actualiza el CLI: el perfil está abierto en una app de Shum más reciente",
-  "Профиль открыт в старом приложении Shum. Обновите приложение или закройте его.": "El perfil está abierto en una app de Shum antigua. Actualiza la app o ciérrala"
+  "Профиль открыт в старом приложении Shum. Обновите приложение или закройте его.": "El perfil está abierto en una app de Shum antigua. Actualiza la app o ciérrala",
+  "Обновить Shum до последней версии": "Actualizar Shum a la última versión",
+  "Автообновление в фоне: on или off": "Actualizaciones en segundo plano: on u off",
+  "Автообновление включено": "Las actualizaciones automáticas están activadas",
+  "Автообновление выключено": "Las actualizaciones automáticas están desactivadas",
+  "Shum обновлён до {}": "Shum actualizado a {}",
+  "У вас последняя версия {}": "Tienes la última versión, {}",
+  "Эту установку Shum обновить автоматически нельзя": "Esta instalación de Shum no puede actualizarse sola"
 }

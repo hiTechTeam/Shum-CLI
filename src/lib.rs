@@ -15,3 +15,4 @@ pub mod runtime;
 pub mod service;
 pub mod terminal;
 pub mod ui;
+pub mod update;

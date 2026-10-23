@@ -13,7 +13,14 @@ brew install hitechteam/shum/shum
 shum
 ```
 
-The first launch creates a profile. To update:
+The first launch creates a profile. Shum updates itself: its background service checks GitHub once a day and installs a new version the way Shum was installed. To update at once, or to turn the background updates off:
+
+```sh
+shum update
+shum update --auto off
+```
+
+With Homebrew you can also update by hand:
 
 ```sh
 brew update
