@@ -1,3 +1,22 @@
+# Shum CLI 0.1.17 · 24 October 2026
+
+* The same Shum-Core as every other client: the iPhone now runs the same Bluetooth mesh as Shum on computers, so a CLI and an iPhone nearby find each other and talk over Bluetooth directly.
+* Installed 0.1.16 updates to this version on its own.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.12 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* То же ядро Shum-Core, что у всех клиентов: iPhone теперь работает на той же Bluetooth-сети, что Shum на компьютерах, поэтому CLI и iPhone рядом находят друг друга и переписываются по Bluetooth напрямую.
+* Установленная 0.1.16 обновится до этой версии сама.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.12 те же изменения.
+
 # Shum CLI 0.1.16 · 24 October 2026
 
 * Delivery marks as in every Shum client: ◷ while a message is on its way (queued or waiting on a relay), ✓ once the recipient's device has it, ✓✓ once it is read. ASCII mode shows [sending], [delivered], [read].
