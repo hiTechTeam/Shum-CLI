@@ -381,10 +381,9 @@ fn ticks(status: &str, ascii: bool) -> &str {
         ("read", true) => "[read]",
         ("delivered", false) => "✓",
         ("delivered", true) => "[delivered]",
-        ("forwarding", false) => "↗",
-        ("forwarding", true) => "[relay]",
-        ("queued", false) => "…",
-        ("queued", true) => "[queued]",
+        // On its way, queued or waiting on a relay: a clock, as in every client.
+        ("forwarding" | "queued", false) => "◷",
+        ("forwarding" | "queued", true) => "[sending]",
         ("expired", _) => t("[истекло]"),
         ("cancelled", _) => t("[отменено]"),
         _ => "",

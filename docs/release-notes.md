@@ -1,3 +1,22 @@
+# Shum CLI 0.1.16 · 24 October 2026
+
+* Delivery marks as in every Shum client: ◷ while a message is on its way (queued or waiting on a relay), ✓ once the recipient's device has it, ✓✓ once it is read. ASCII mode shows [sending], [delivered], [read].
+* Installed 0.1.15 updates to this version on its own.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.11 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Отметки доставки как во всех клиентах Shum: ◷ пока сообщение в пути (в очереди или ждёт на релее), ✓ когда оно на устройстве получателя, ✓✓ когда прочитано. В режиме ASCII: [sending], [delivered], [read].
+* Установленная 0.1.15 обновится до этой версии сама.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.11 те же изменения.
+
 # Shum CLI 0.1.15 · 23 October 2026
 
 * Shum updates itself: the background service checks GitHub once a day and installs a new version the way Shum was installed (Homebrew or the install script), then restarts on it. `shum update` updates at once; `shum update --auto off` turns the background updates off.
