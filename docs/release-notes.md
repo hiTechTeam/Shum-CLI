@@ -1,3 +1,22 @@
+# Shum CLI 0.1.18 · 25 October 2026
+
+* One profile on several devices: a profile restored from a backup on another device now shows there what this one sends, with its delivery marks, and messages read on one device are read on the others. Messages sent before this version are not copied.
+* Installed 0.1.17 updates to this version on its own.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.13 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах: если профиль восстановлен из копии на другом устройстве, там видно всё, что отправлено с этого, вместе с отметками доставки, а прочитанное на одном устройстве становится прочитанным на остальных. Сообщения, отправленные до этой версии, не копируются.
+* Установленная 0.1.17 обновится до этой версии сама.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.13 те же изменения.
+
 # Shum CLI 0.1.17 · 24 October 2026
 
 * The same Shum-Core as every other client: the iPhone now runs the same Bluetooth mesh as Shum on computers, so a CLI and an iPhone nearby find each other and talk over Bluetooth directly.

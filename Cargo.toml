@@ -1,25 +1,25 @@
 [package]
 name = "shum-cli"
 description = "Shum command-line and terminal client"
-version = "0.1.17"
+version = "0.1.18"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/hiTechTeam/Shum-CLI"
 
 # Windows builds started later and carry their own version line.
 [package.metadata.shum]
-windows-version = "0.1.12"
+windows-version = "0.1.13"
 
 [[bin]]
 name = "shum"
 path = "src/main.rs"
 
 [dependencies]
-shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "acab23816f049e937604291705fb5c1aa0f740d4" }
-shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "acab23816f049e937604291705fb5c1aa0f740d4" }
-shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "acab23816f049e937604291705fb5c1aa0f740d4" }
-shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "acab23816f049e937604291705fb5c1aa0f740d4" }
-shum-session = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "acab23816f049e937604291705fb5c1aa0f740d4" }
+shum-core = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "7c5e75d6d74118af6c519da4825b09a88195cb3c" }
+shum-transport-nostr = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "7c5e75d6d74118af6c519da4825b09a88195cb3c" }
+shum-transport-ble = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "7c5e75d6d74118af6c519da4825b09a88195cb3c" }
+shum-store = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "7c5e75d6d74118af6c519da4825b09a88195cb3c" }
+shum-session = { git = "https://github.com/hiTechTeam/Shum-Core.git", rev = "7c5e75d6d74118af6c519da4825b09a88195cb3c" }
 anyhow = "1"
 fs2 = "0.4.3"
 base64 = "0.22.1"
