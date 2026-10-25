@@ -1,3 +1,22 @@
+# Shum CLI 0.1.19 · 25 October 2026
+
+* One profile on several devices, continued: a reaction set or removed on one device shows on the others, and a message withdrawn on one device disappears from the others. Reactions and withdrawals made before this version are not shared.
+* Installed 0.1.18 updates to this version on its own.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.14 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах, продолжение: реакция, поставленная или снятая на одном устройстве, видна на остальных, а сообщение, отозванное на одном устройстве, исчезает с остальных. Реакции и отзывы, сделанные до этой версии, не передаются.
+* Установленная 0.1.18 обновится до этой версии сама.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.14 те же изменения.
+
 # Shum CLI 0.1.18 · 25 October 2026
 
 * One profile on several devices: a profile restored from a backup on another device now shows there what this one sends, with its delivery marks, and messages read on one device are read on the others. Messages sent before this version are not copied.
