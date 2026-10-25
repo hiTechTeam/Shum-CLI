@@ -1,3 +1,22 @@
+# Shum CLI 0.1.20 · 25 October 2026
+
+* One profile on several devices, continued: clearing a chat on one device clears it on the others. Messages that arrive after the clear stay. The contact keeps their copy of the chat.
+* Installed 0.1.19 updates to this version on its own.
+
+macOS 15+, Apple Silicon and Intel. Windows preview 0.1.14 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах, продолжение: переписка, очищенная на одном устройстве, очищается и на остальных. Сообщения, пришедшие после очистки, остаются. У собеседника его копия переписки сохраняется.
+* Установленная 0.1.19 обновится до этой версии сама.
+
+macOS 15+, Apple Silicon и Intel. В превью для Windows 0.1.14 те же изменения.
+
 # Shum CLI 0.1.19 · 25 October 2026
 
 * One profile on several devices, continued: a reaction set or removed on one device shows on the others, and a message withdrawn on one device disappears from the others. Reactions and withdrawals made before this version are not shared.
