@@ -1,11 +1,11 @@
 #!/bin/sh
-# Install the signed universal release for the current macOS user.
+# Install the signed Apple Silicon release for the current macOS user.
 set -eu
 umask 077
 
 project_url=https://github.com/hiTechTeam/Shum-CLI
 release_url=https://github.com/hiTechTeam/homebrew-shum/releases/latest/download
-asset=shum-macos-universal.tar.gz
+asset=shum-macos-arm64.tar.gz
 certificate=9ce51b5c3430742e7860fc77583b41baa8355085
 fail() { printf '%s\n' "Shum: $*" >&2; exit 1; }
 case ${1-} in
@@ -14,8 +14,9 @@ case ${1-} in
     *) fail 'Использование: sh install.sh [--uninstall]' ;;
 esac
 [ "$#" -le 1 ] || fail 'Слишком много аргументов'
-[ "$(uname -s)" = Darwin ] || fail "Этот установщик поддерживает macOS 15+, Apple Silicon и Intel. Информация: $project_url"
-case $(uname -m) in arm64|x86_64) ;; *) fail "Архитектура не поддерживается. Информация: $project_url" ;; esac
+[ "$(uname -s)" = Darwin ] || fail "Этот установщик поддерживает macOS 15+ на Apple Silicon. Информация: $project_url"
+# hw.optional.arm64 is 1 on Apple Silicon even in a shell running under Rosetta.
+[ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] || fail "Нужен Mac на Apple Silicon. Информация: $project_url"
 case ${HOME-} in /*) ;; *) fail 'Домашний каталог недоступен' ;; esac
 install_dir=$HOME/.local/share/shum
 bin_dir=$HOME/.local/bin
@@ -105,9 +106,7 @@ app=$temporary/unpacked/Shum.app
 codesign --verify --strict --all-architectures \
     -R "=identifier \"org.shum.cli\" and certificate leaf = H\"$certificate\"" "$app" \
     || fail 'Подпись Shum.app не прошла проверку. Настройки доверия macOS не изменены.'
-for architecture in arm64 x86_64; do
-    codesign --display --arch "$architecture" "$app" >/dev/null 2>&1 || fail 'Архив не содержит обе архитектуры'
-done
+codesign --display --arch arm64 "$app" >/dev/null 2>&1 || fail 'Архив не содержит сборку для Apple Silicon'
 version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")
 [ "$("$app/Contents/MacOS/shum" --version)" = "shum $version" ] || fail 'Версия бинарника не совпадает с бандлом'
 mkdir -p "$install_dir/versions" "$bin_dir"

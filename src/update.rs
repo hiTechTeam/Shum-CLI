@@ -1,6 +1,6 @@
 //! Keeping Shum up to date. The background service checks GitHub once a day
 //! and updates the CLI the way it was installed: Homebrew on macOS, or the
-//! install script on macOS and Windows; the services then restart on the new
+//! install script on macOS, Linux and Windows; the services then restart on the new
 //! version. `shum update` does the same at once, and `shum update --auto off`
 //! turns the background updates off. Development builds never update.
 use anyhow::{bail, Context, Result};
@@ -14,6 +14,8 @@ use std::{
 const RELEASES: &str = "https://api.github.com/repos/hiTechTeam/Shum-CLI/releases";
 const INSTALL_SH: &str = "https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh";
 const INSTALL_PS1: &str = "https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1";
+const INSTALL_LINUX: &str =
+    "https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh";
 const DAY: u64 = 24 * 60 * 60;
 
 pub const VERSION: &str = env!("SHUM_VERSION");
@@ -40,7 +42,10 @@ pub fn install() -> Install {
             return Install::Homebrew { brew };
         }
     }
-    if path.contains("/.local/share/shum/Shum.app/") || path.contains("/Programs/Shum/") {
+    if path.contains("/.local/share/shum/Shum.app/")
+        || path.contains("/.local/lib/shum-cli/")
+        || path.contains("/Programs/Shum/")
+    {
         return Install::Script;
     }
     Install::Development
@@ -80,7 +85,7 @@ fn fetch(url: &str) -> Result<Value> {
 }
 
 /// The newest released version for this system: the latest release on
-/// macOS, the newest `windows-v*` preview on Windows.
+/// macOS and Linux, the newest `windows-v*` preview on Windows.
 pub fn latest() -> Result<String> {
     if cfg!(windows) {
         let releases = fetch(&format!("{RELEASES}?per_page=30"))?;
@@ -125,10 +130,13 @@ fn command(install: &Install) -> Option<Command> {
             Some(command)
         }
         Install::Script => {
+            let script = if cfg!(target_os = "linux") {
+                INSTALL_LINUX
+            } else {
+                INSTALL_SH
+            };
             let mut command = Command::new("/bin/sh");
-            command
-                .arg("-c")
-                .arg(format!("curl -fsSL {INSTALL_SH} | sh"));
+            command.arg("-c").arg(format!("curl -fsSL {script} | sh"));
             Some(command)
         }
         Install::Development => None,

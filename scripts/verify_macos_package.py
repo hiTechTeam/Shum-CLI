@@ -33,9 +33,8 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
     assert hashlib.sha256(binary.read_bytes()).hexdigest() == manifest["binarySha256"]
     minima, images = macho_requirements(binary)
     assert minima == manifest["minimumMacOSByArchitecture"]
-    assert sorted(minima) == manifest["architectures"] == ["arm64", "x86_64"]
+    assert sorted(minima) == manifest["architectures"] == ["arm64"]
     assert len(images) == manifest["embeddedExecutables"]
-    subprocess.run(["/usr/bin/lipo", "-info", str(binary)], check=True)
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     assert info["CFBundleIdentifier"] == "org.shum.cli"
     assert info["CFBundleVersion"] == info["CFBundleShortVersionString"] == manifest["version"]
@@ -78,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix="shum-package-check-") as temporary:
     revision = manifest.get("packageRevision", 0)
     assert isinstance(revision, int) and revision >= 0
     assert (f"  revision {revision}\n" in formula) if revision else "  revision " not in formula
-    assert "depends_on arch:" not in formula
+    assert "depends_on arch: :arm64" in formula
     assert 'app = buildpath unless app.directory?' in formula
     assert '(prefix/"Shum.app").install app/"Contents"' in formula
     assert 'bin.install_symlink prefix/"Shum.app/Contents/MacOS/shum"' in formula

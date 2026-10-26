@@ -10,7 +10,7 @@
 
 * установщик `.pkg`, который кладёт `Shum.app` в `/usr/local/libexec/shum`,
   а в `/usr/local/bin/shum` создаёт ссылку на бинарник внутри бандла;
-* универсальный архив `shum-macos-universal.tar.gz` с подписанным `Shum.app`
+* архив `shum-macos-arm64.tar.gz` с подписанным `Shum.app`
   для Homebrew и установки скриптом;
 * формулу `dist/homebrew-shum/Formula/shum.rb`;
 * SHA-256 и JSON с версией, обеими архитектурами и минимальной macOS каждой.
@@ -29,35 +29,26 @@ python3 scripts/package_macos.py
 Или упаковка уже проверенного бинарника:
 
 ```sh
-python3 scripts/package_macos.py --binary /путь/к/shum-universal
+python3 scripts/package_macos.py --binary /путь/к/shum
 ```
 
-Целевая платформа: **macOS 15+, Apple Silicon и Intel**. Сборка выполняет Cargo
-для `aarch64-apple-darwin` и `x86_64-apple-darwin`, затем `lipo -create` и подпись
-единственного универсального бинарника внутри Shum.app. Цели должны быть установлены
-заранее; скрипт не загружает Rust toolchain. Перед загрузкой Intel-цели согласуйте:
-
-```sh
-rustup target add x86_64-apple-darwin
-```
+Целевая платформа: **macOS 15+ на Apple Silicon**. С 0.1.21 сборок для Intel нет:
+скрипт выполняет Cargo для `aarch64-apple-darwin` и подписывает бинарник внутри
+Shum.app. Скрипт не загружает Rust toolchain.
 
 Для C-зависимостей (secp256k1, zlib, sqlite) задаётся deployment target 15.0;
 cc-rs получает архитектуру от Cargo. Закреплённый build.rs ядра вызывает Swift без
 cross-target: временный адаптер `xcrun` добавляет соответствующий Swift `-target`
 для встроенного CoreBluetooth-помощника. Исходники ядра и Cargo cache не изменяются.
 
-Проверяется Mach-O каждого среза CLI и его встроенного Bluetooth-помощника:
-архитектуры совпадают, максимальный minimum OS равен 15.0.0, динамические библиотеки
-только системные. Формула не ограничена arm64; один и тот же архив используется
-на обеих архитектурах. Проверка на настоящем Intel Mac пока не проводилась.
-Под Rosetta прошли Intel CLI --version и релейный сценарий с приглашениями,
-сообщениями, квитанциями и сохранением очереди при перезапуске. Rosetta на Apple
-Silicon не заменяет настоящий Intel Mac. Windows и Linux не собирались.
+Проверяется Mach-O CLI и его встроенного Bluetooth-помощника: оба arm64,
+максимальный minimum OS равен 15.0.0, динамические библиотеки только системные.
+Формула требует `arch: :arm64`; установщик скриптом отказывает на Intel Mac.
 
 Проверка пакета без установки:
 
 ```sh
-python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.8-macOS-universal-unsigned.pkg
+python3 scripts/verify_macos_package.py dist/Shum-CLI-0.1.21-macOS-arm64-unsigned.pkg
 ```
 
 ## Homebrew
@@ -91,7 +82,7 @@ Shum-Core подключается как отдельная закреплён�
 curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh | sh
 ```
 
-Архив и `shum-macos-universal.tar.gz.sha256` загружаются из
+Архив и `shum-macos-arm64.tar.gz.sha256` загружаются из
 `https://github.com/hiTechTeam/homebrew-shum/releases/latest/download`.
 Имя файла стабильно, версия находится в бандле и манифесте. Формула использует
 тот же файл в каталоге конкретного выпуска `releases/download/vVERSION`;

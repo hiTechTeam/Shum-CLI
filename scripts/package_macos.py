@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a universal macOS installer. End users do not need developer tools."""
+"""Build the macOS installer for Apple Silicon. End users do not need developer tools."""
 
 import argparse
 import base64
@@ -82,42 +82,25 @@ def thin_requirements(data):
 
 
 def macho_requirements(path):
-    """Validate both fat slices and the architecture of each embedded BLE helper."""
+    """Validate the Apple Silicon executable and its embedded BLE helper."""
     data = path.read_bytes()
-    if data[:4] != b"\xca\xfe\xba\xbe":
-        raise ValueError("Нужен универсальный Mach-O: arm64 и x86_64")
-    count, = struct.unpack_from(">I", data, 4)
-    if count != 2:
-        raise ValueError("Нужны ровно две архитектуры: arm64 и x86_64")
-    minima = {}
-    images = []
-    ranges = []
-    for i in range(count):
-        cpu, _, start, size, _ = struct.unpack_from(">5I", data, 8 + 20 * i)
-        if cpu not in (0x100000C, 0x1000007) or start < 8 + 20 * count or start + size > len(data):
-            raise ValueError("Недействительный универсальный Mach-O")
-        if any(start < end and begin < start + size for begin, end in ranges):
-            raise ValueError("Пересекающиеся архитектуры Mach-O")
-        ranges.append((start, start + size))
-        name = "arm64" if cpu == 0x100000C else "x86_64"
-        if name in minima:
-            raise ValueError("Повторная архитектура Mach-O")
-        embedded = thin_requirements(data[start:start + size])
-        if embedded[0]["cpu"] != cpu:
-            raise ValueError("Архитектура среза не соответствует заголовку")
-        minimum = max(image["minimum"] for image in embedded)
-        if minimum != (15, 0, 0):
-            raise ValueError(f"{name}: требуется deployment target macOS 15.0, получено {minimum}")
-        minima[name] = ".".join(map(str, minimum))
-        images.extend(dict(image, architecture=name, offset=start + image["offset"]) for image in embedded)
-    return minima, images
+    if data[:4] != b"\xcf\xfa\xed\xfe":
+        raise ValueError("Нужен Mach-O для Apple Silicon (arm64)")
+    embedded = thin_requirements(data)
+    if embedded[0]["cpu"] != 0x100000C:
+        raise ValueError("Нужен Mach-O для Apple Silicon (arm64)")
+    minimum = max(image["minimum"] for image in embedded)
+    if minimum != (15, 0, 0):
+        raise ValueError(f"arm64: требуется deployment target macOS 15.0, получено {minimum}")
+    minima = {"arm64": ".".join(map(str, minimum))}
+    return minima, [dict(image, architecture="arm64") for image in embedded]
 
 
-def build_universal():
-    """Core's pinned BLE build script needs an explicit Swift cross target."""
+def build_arm64():
+    """Core's pinned BLE build script gets its Swift target through xcrun."""
     target_dir = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target/macos-package")).resolve()
     installed = run("rustup", "target", "list", "--installed", capture_output=True).stdout.splitlines()
-    targets = {"aarch64-apple-darwin": "arm64", "x86_64-apple-darwin": "x86_64"}
+    targets = {"aarch64-apple-darwin": "arm64"}
     missing = targets.keys() - set(installed)
     if missing:
         raise ValueError("Цель Rust отсутствует; сначала согласуйте загрузку: " + ", ".join(sorted(missing)))
@@ -128,7 +111,6 @@ def build_universal():
                            'swiftc) shift; exec /usr/bin/xcrun swiftc -target "$SHUM_SWIFT_TARGET" "$@" ;;\n'
                            '*) exec /usr/bin/xcrun "$@" ;;\nesac\n')
         wrapper.chmod(0o755)
-        binaries = []
         for rust_target, architecture in targets.items():
             env = dict(os.environ, PATH=temporary + os.pathsep + os.environ["PATH"],
                        MACOSX_DEPLOYMENT_TARGET="15.0", SDKROOT=sdk,
@@ -139,10 +121,7 @@ def build_universal():
             env[f"CXXFLAGS_{key}"] = "-mmacosx-version-min=15.0"
             run("cargo", "build", "--locked", "--release", "-p", "shum-cli",
                 "--target", rust_target, "--target-dir", str(target_dir), cwd=ROOT, env=env)
-            binaries.append(target_dir / rust_target / "release/shum")
-        binary = target_dir / "shum-universal"
-        run("/usr/bin/lipo", "-create", *(str(p) for p in binaries), "-output", str(binary))
-    return binary
+    return target_dir / "aarch64-apple-darwin/release/shum"
 
 
 def application_identity(name):
@@ -172,7 +151,7 @@ def sign_application(app, identity, development=False):
     if certificate:
         if 'identifier "org.shum.cli"' not in designated or certificate.lower() not in designated.lower() or "cdhash" in designated:
             raise ValueError(f"Нестабильное требование подписи: {designated}")
-    for architecture in ("arm64", "x86_64"):
+    for architecture in ("arm64",):
         result = run("/usr/bin/codesign", "--arch", architecture, "-dr", "-", str(app), capture_output=True)
         other = next((line for line in result.stdout.splitlines() if line.startswith("designated =>")), "")
         if certificate and other != designated:
@@ -206,14 +185,13 @@ def main():
     if args.binary:
         binary = args.binary.expanduser().resolve(strict=True)
     else:
-        binary = build_universal()
+        binary = build_arm64()
         source_revision = run("git", "describe", "--always", "--dirty", cwd=ROOT,
                               capture_output=True).stdout.strip()
     minima, images = macho_requirements(binary)
-    architecture = "universal"
+    architecture = "arm64"
     minimum = "15.0.0"
     macos_name = "sequoia"
-    run("/usr/bin/lipo", "-info", str(binary))
     clean_env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ["HOME"]}
     actual_version = run(str(binary), "--version", env=clean_env, capture_output=True).stdout.strip()
     if actual_version != f"shum {version}":
@@ -222,7 +200,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     suffix = "" if args.sign_installer else "-unsigned"
     package = output / f"Shum-CLI-{version}-macOS-{architecture}{suffix}.pkg"
-    archive = output / "shum-macos-universal.tar.gz"
+    archive = output / "shum-macos-arm64.tar.gz"
     if package.exists() or archive.exists():
         parser.error(f"Файл уже существует: {package}")
     with tempfile.TemporaryDirectory(prefix="shum-package-") as temporary:
@@ -316,6 +294,7 @@ def main():
   sha256 "{archive_digest}"
   license "MIT"
 {revision_line}
+  depends_on arch: :arm64
   depends_on macos: :{macos_name}
 
   def install

@@ -1,3 +1,28 @@
+# Shum CLI 0.1.21 · 26 October 2026
+
+* One profile on several devices, continued: accepting, declining or sending an invitation on one device shows on the others, so an invitation answered in the browser no longer waits on the phone.
+* Adding your own card by link or QR now says it is your profile instead of failing.
+* First Linux preview, x64 and ARM64: `curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh`. It replaces the Linux desktop app, which is no longer built.
+* Mac builds are for Apple Silicon only; Intel Macs stay on 0.1.20.
+* Installed 0.1.20 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.15 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах, продолжение: приглашение, принятое, отклонённое или отправленное на одном устройстве, так же выглядит на остальных. Приглашение, на которое ответили в браузере, больше не висит в телефоне.
+* Если добавить свою карточку по ссылке или QR, Shum скажет, что это ваш профиль.
+* Первое превью для Linux, x64 и ARM64: `curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh`. Оно заменяет десктоп-приложение для Linux, которое больше не собирается.
+* Сборки для Mac только для Apple Silicon; Intel Mac остаются на 0.1.20.
+* Установленная 0.1.20 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.15 те же изменения.
+
 # Shum CLI 0.1.20 · 25 October 2026
 
 * One profile on several devices, continued: clearing a chat on one device clears it on the others. Messages that arrive after the clear stay. The contact keeps their copy of the chat.

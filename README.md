@@ -6,7 +6,7 @@ Terminal client for Shum, built on [Shum Core](https://github.com/hiTechTeam/Shu
 
 ## Install
 
-Current release: **0.1.9 preview, macOS 15+, Apple Silicon and Intel**.
+Current release: **0.1.21 preview, macOS 15+ on Apple Silicon, Linux x64 and ARM64**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh
 
 The script checks SHA-256 and the app signature, installs in `~/.local/share/shum`, and links `~/.local/bin/shum`. It prints a PATH hint when needed and leaves shell files alone. It refuses to install alongside Homebrew.
 
-[Downloads](https://github.com/hiTechTeam/Shum-CLI/releases) include a universal archive and a macOS installer. The app uses a self-signed certificate, not Apple Developer ID, and is not notarized. Gatekeeper on a clean account and a real Intel Mac remain untested.
+[Downloads](https://github.com/hiTechTeam/Shum-CLI/releases) include an Apple Silicon archive and a macOS installer. Intel Macs are not supported since 0.1.21. The app uses a self-signed certificate, not Apple Developer ID, and is not notarized. Gatekeeper on a clean account remains untested.
 
 ## Use
 
@@ -89,6 +89,16 @@ irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1 | iex
 
 The script picks the build for your processor, checks SHA-256, installs `shum.exe` in `%LOCALAPPDATA%\Programs\Shum` and adds it to your user PATH. Builds are cross-compiled on macOS (`scripts/package_windows.sh`) and are not code-signed. They have not been run on Windows hardware yet. Bluetooth only discovers nearby devices so far; other devices cannot find a Windows computer, and computers without Bluetooth chat over the internet.
 
+### Linux (preview)
+
+Linux shares the macOS version line. x64 and ARM64, glibc 2.35 or later (Ubuntu 22.04, Debian 12 and newer). Install or update without sudo:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh
+```
+
+The script picks the build for your processor, checks SHA-256, installs `shum` in `~/.local/lib/shum-cli` and links it as `~/.local/bin/shum`. Profiles live in `~/.local/share/shum`, keys in the system secret store (GNOME Keyring or KWallet), services run as `systemd --user` units. Bluetooth goes through BlueZ. Builds are made in Docker on macOS (`scripts/package_linux.sh`) and are not signed.
+
 ## Backup
 
 A backup moves a profile to another computer or brings it back. The file is protected by a password of at least 10 characters; keep the file and the password apart. Backups use the shared format of protocol section 13, so other Shum clients restore them too.
@@ -119,6 +129,12 @@ For Windows:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1))) -Uninstall
+```
+
+For Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh -s -- --uninstall
 ```
 
 Profile data stays in `~/Library/Application Support/org.Shum.Shum` or your `--data-dir`; profile keys may be in Keychain.
@@ -152,7 +168,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Linux and Windows packages are pending.
+CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. The current client implements the v1 draft; multi-device sync is planned. Windows and Linux builds are previews.
 
 Version 0.1.8 adds ten languages, keyboard menus and invitation history, and fixes images around popup menus. See the [release verification report](docs/release-verification-0.1.8-r1.md). Bluetooth permission persistence and iPhone delivery after this release still need real-device verification.
 

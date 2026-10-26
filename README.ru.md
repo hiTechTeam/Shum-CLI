@@ -6,7 +6,7 @@
 
 ## Установка
 
-Текущий выпуск: **0.1.9 preview, macOS 15+, Apple Silicon и Intel**.
+Текущий выпуск: **0.1.21 preview, macOS 15+ на Apple Silicon, Linux x64 и ARM64**.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh
 
 Скрипт проверяет SHA-256 и подпись, устанавливает бандл в `~/.local/share/shum` и ссылку `~/.local/bin/shum`. При необходимости показывает подсказку PATH, файлы оболочки не меняет. Установка рядом с Homebrew отклоняется.
 
-В [загрузках](https://github.com/hiTechTeam/Shum-CLI/releases) есть универсальный архив и установщик macOS. Сертификат самоподписанный, не Apple Developer ID; нотарификации нет. Gatekeeper на чистой учётной записи и настоящий Intel Mac пока не проверены.
+В [загрузках](https://github.com/hiTechTeam/Shum-CLI/releases) есть архив для Apple Silicon и установщик macOS. Intel Mac не поддерживается с 0.1.21. Сертификат самоподписанный, не Apple Developer ID; нотарификации нет. Gatekeeper на чистой учётной записи пока не проверен.
 
 ## Использование
 
@@ -89,6 +89,16 @@ irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1 | iex
 
 Скрипт выбирает сборку под процессор, проверяет SHA-256, ставит `shum.exe` в `%LOCALAPPDATA%\Programs\Shum` и добавляет каталог в PATH пользователя. Сборки делаются на macOS кросс-компиляцией (`scripts/package_windows.sh`) и не подписаны. На настоящем Windows они ещё не запускались. Bluetooth пока только находит устройства рядом: другие устройства компьютер с Windows не видят, а без Bluetooth переписка идёт через интернет.
 
+### Linux (превью)
+
+У Linux та же нумерация, что у macOS. x64 и ARM64, glibc 2.35 и новее (Ubuntu 22.04, Debian 12 и новее). Установка и обновление без sudo:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh
+```
+
+Скрипт выбирает сборку под процессор, проверяет SHA-256, ставит `shum` в `~/.local/lib/shum-cli` и делает ссылку `~/.local/bin/shum`. Профили лежат в `~/.local/share/shum`, ключи в хранилище секретов системы (GNOME Keyring или KWallet), службы работают как юниты `systemd --user`. Bluetooth через BlueZ. Сборки делаются в Docker на macOS (`scripts/package_linux.sh`) и не подписаны.
+
 ## Резервная копия
 
 Копия переносит профиль на другой компьютер или возвращает его. Файл защищён паролем не короче 10 символов; храните файл и пароль отдельно. Формат общий для всех клиентов Shum (раздел 13 протокола), поэтому копию восстановят и другие клиенты.
@@ -119,6 +129,12 @@ curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.sh
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install.ps1))) -Uninstall
+```
+
+Для Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hiTechTeam/Shum-CLI/main/install-linux.sh | sh -s -- --uninstall
 ```
 
 Данные остаются в `~/Library/Application Support/org.Shum.Shum` или вашем `--data-dir`; ключи могут храниться в Keychain.
@@ -152,7 +168,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Клиент реализует черновик v1; синхронизация устройств впереди. Пакеты Linux и Windows пока готовятся.
+CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Клиент реализует черновик v1; синхронизация устройств впереди. Сборки для Windows и Linux пока в превью.
 
 Версия 0.1.8 добавляет десять языков, управление меню с клавиатуры и историю приглашений, исправляет исчезновение изображений рядом с меню. Проверки описаны в [отчёте выпуска](docs/release-verification-0.1.8-r1.md). Сохранение разрешения Bluetooth и доставка на iPhone после этого выпуска ещё требуют проверки на устройстве.
 
