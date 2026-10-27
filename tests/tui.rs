@@ -295,6 +295,12 @@ fn keyboard_modes_keep_shortcuts_reachable_without_corrupting_messages() {
         Action::Qr
     ));
     assert_eq!(view.input, "qiйшаф123", "Esc preserves an unsent draft");
+    let tab = view.tab;
+    handle_key(&mut view, &data, key(K::Tab)).unwrap();
+    assert!(
+        view.tab != tab && !view.composing,
+        "Tab moves between tabs after Esc from a chat"
+    );
     for modal in [0, 1, 2] {
         view.help = modal == 0;
         view.qr = if modal == 1 {
@@ -303,7 +309,20 @@ fn keyboard_modes_keep_shortcuts_reachable_without_corrupting_messages() {
             None
         };
         view.profiles = if modal == 2 { Some(vec![]) } else { None };
-        for code in [K::Char('c'), K::Char('q'), K::Char('с'), K::F(10)] {
+        // Ctrl+C copies in Windows consoles, so it only names the quit key.
+        for code in [K::Char('c'), K::Char('с')] {
+            assert!(matches!(
+                handle_key(
+                    &mut view,
+                    &data,
+                    crossterm::event::KeyEvent::new(code, M::CONTROL)
+                )
+                .unwrap(),
+                Action::None
+            ));
+            assert_eq!(view.status, "Выход: Ctrl+Q");
+        }
+        for code in [K::Char('q'), K::Char('й'), K::F(10)] {
             assert!(matches!(
                 handle_key(
                     &mut view,

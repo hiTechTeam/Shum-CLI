@@ -154,7 +154,7 @@ fn draw_security(
         let mark = if index == completed {
             animation.spinner().to_string()
         } else {
-            mark.into()
+            crate::terminal::glyphs(mark).into_owned()
         };
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -343,14 +343,17 @@ fn draw_content(frame: &mut Frame<'_>, wizard: &Wizard, pictures: &mut Pictures,
                 Line::from(t("Шифруем базу и проверяем ключи.")),
             ],
             Step::Done => vec![
-                Line::from(Span::styled(t("✓ Профиль готов"), green)),
-                Line::from(t("✓ Ключи и шифрование")),
+                Line::from(Span::styled(
+                    crate::terminal::glyphs(t("✓ Профиль готов")).into_owned(),
+                    green,
+                )),
+                Line::from(crate::terminal::glyphs(t("✓ Ключи и шифрование")).into_owned()),
                 Line::from(if wizard.file_keys {
-                    t("✓ Файл ключей 0600")
+                    crate::terminal::glyphs(t("✓ Файл ключей 0600")).into_owned()
                 } else {
-                    t("✓ Системное хранилище ключей")
+                    crate::terminal::glyphs(t("✓ Системное хранилище ключей")).into_owned()
                 }),
-                Line::from(t("✓ Проверка чтения и подписей")),
+                Line::from(crate::terminal::glyphs(t("✓ Проверка чтения и подписей")).into_owned()),
                 Line::from(t("[Enter] продолжить")),
             ],
             Step::Name => unreachable!(),

@@ -367,7 +367,7 @@ fn delivery_marker(message: &Value, ascii: bool) -> String {
     if message["outgoing"] != true {
         return String::new();
     }
-    let marker = ticks(text(&message["status"]), ascii);
+    let marker = crate::terminal::glyphs(ticks(text(&message["status"]), ascii));
     // Keep the row width fixed from queued through read, including wrap edges.
     if !ascii && ["queued", "forwarding", "delivered", "read"].contains(&text(&message["status"])) {
         format!("{marker:>2}")
@@ -412,7 +412,7 @@ fn draw_content(
     let area = frame.area();
     if area.width < 35 || area.height < 12 {
         frame.render_widget(
-            Paragraph::new(t("Увеличьте окно терминала (от 35×12). Ctrl+C: выход")),
+            Paragraph::new(t("Увеличьте окно терминала (от 35×12). Ctrl+Q: выход")),
             area,
         );
         return;
@@ -860,7 +860,7 @@ fn draw_content(
                 if view.composing {
                     t("Сообщение · Enter отправить · Esc к списку")
                 } else {
-                    t("Сообщение · Tab ввод")
+                    t("Сообщение · Enter открыть")
                 },
                 ascii,
             )
@@ -936,7 +936,7 @@ fn draw_content(
     } else if full_empty {
         t("i мой QR · a добавить · ^N рядом · ^P профили · / команды · q выход")
     } else {
-        t("↑↓ чаты · Enter открыть · Tab ввод · / команды · ^P профили · q выход")
+        t("↑↓ чаты · Enter открыть · Tab вкладки · / команды · ^P профили · q выход")
     };
     frame.render_widget(
         Paragraph::new(vec![
@@ -1226,6 +1226,12 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
     if key.kind != event::KeyEventKind::Press {
         return Ok(Action::None);
     }
+    // Windows consoles use Ctrl+C to copy, so in chats it only points at the quit key.
+    if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c' | 'с'))
+    {
+        view.status = t("Выход: Ctrl+Q").into();
+        return Ok(Action::None);
+    }
     if is_quit_key(key) {
         return Ok(Action::Quit);
     }
@@ -1371,9 +1377,10 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
             if view.command_mode {
                 view.command_mode = false;
                 view.input.clear();
-            } else if view.opened.is_some() {
-                view.composing = !view.composing;
+            } else if view.composing {
+                view.composing = false;
             } else {
+                // From the list Tab always moves between tabs, even with a chat still shown.
                 view.tab = (view.tab + 1) % 4;
                 view.selected = 0;
             }
@@ -1757,7 +1764,7 @@ async fn run_loop(
             if let Some(value) = updates.borrow_and_update().clone() {
                 *snapshot = value;
             } else {
-                view.status = t("Служба не отвечает. Ctrl+C или F10: выход").into();
+                view.status = t("Служба не отвечает. Ctrl+Q или F10: выход").into();
             }
         }
         if pending.as_ref().is_some_and(|job| job.task.is_finished()) {
@@ -1934,7 +1941,7 @@ async fn run_loop(
             }
             action => {
                 if pending.is_some() {
-                    view.status = t("Команда выполняется. Можно выйти: Ctrl+C / F10").into();
+                    view.status = t("Команда выполняется. Можно выйти: Ctrl+Q / F10").into();
                     continue;
                 }
                 let root = root.to_owned();
@@ -1982,7 +1989,7 @@ async fn run_loop(
                     clear_input,
                     input: view.input.clone(),
                 });
-                view.status = t("Выполняется… Ctrl+C: выход").into();
+                view.status = t("Выполняется… Ctrl+Q: выход").into();
             }
         }
         let next = Activity {
@@ -2052,7 +2059,7 @@ fn help_text() -> String {
             t("Язык интерфейса"),
         ),
         ("/contacts", t("Список контактов и их Shum ID")),
-        ("q / /quit / /exit / Ctrl+Q / F10", t("Ctrl+C выход")),
+        ("q / /quit / /exit / Ctrl+Q / F10", t("Выход")),
         ("Esc", t("Готово")),
     ];
     rows.into_iter()

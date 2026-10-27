@@ -94,6 +94,14 @@ pub fn safe(text: &str) -> String {
         })
         .collect()
 }
+/// The Windows console font has no ✓ or ◷, so they show as boxes; √ and ○ are there.
+pub fn glyphs(text: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(windows) && text.contains(['✓', '◷']) {
+        text.replace('✓', "√").replace('◷', "○").into()
+    } else {
+        text.into()
+    }
+}
 pub fn text(value: &Value) -> &str {
     value.as_str().unwrap_or("")
 }

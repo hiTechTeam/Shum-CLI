@@ -95,7 +95,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &View, ascii: bool) {
             }
         );
         frame.render_widget(
-            Paragraph::new(label).style(selected_style),
+            Paragraph::new(crate::terminal::glyphs(&label).into_owned()).style(selected_style),
             Rect::new(inner.x, inner.y + row as u16, inner.width, 1),
         );
     }
