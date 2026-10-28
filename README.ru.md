@@ -1,12 +1,34 @@
-# Shum CLI
+<p align="center">
+  <img src="docs/screenshots/icon.png" width="96" alt="Shum">
+</p>
 
-[English](README.md) · Русский
+<h1 align="center">Shum для терминала</h1>
+
+<p align="center">
+  Чаты, приглашения, QR, профили и зашифрованная история в терминале.<br>
+  Сообщения идут по Bluetooth или через релеи Nostr.
+</p>
+
+<p align="center">
+  <a href="https://github.com/hiTechTeam/Shum-CLI/releases/latest"><img src="https://img.shields.io/github/v/release/hiTechTeam/Shum-CLI?filter=v*&label=macOS%20%C2%B7%20Linux&color=2f9e4a" alt="macOS and Linux release"></a>
+  <a href="https://github.com/hiTechTeam/Shum-CLI/releases"><img src="https://img.shields.io/github/v/release/hiTechTeam/Shum-CLI?filter=windows-v*&include_prereleases&label=Windows&color=2f9e4a" alt="Windows release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-111111" alt="MIT"></a>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> · Русский
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/tui.png" width="49%" alt="Чаты в терминале">
+  <img src="docs/screenshots/init.png" width="49%" alt="Создание профиля">
+</p>
 
 Клиент Shum для терминала на [Shum Core](https://github.com/hiTechTeam/Shum-Core). Чаты, приглашения, QR, профили, зашифрованная история и фоновая служба. Сообщения передаются по Bluetooth или через Nostr.
 
 ## Установка
 
-Текущий выпуск: **0.1.21 preview, macOS 15+ на Apple Silicon, Linux x64 и ARM64**.
+У Shum CLI две линии версий, их показывают бейджи выше: **macOS и Linux** (macOS 15+ на Apple Silicon, Linux x64 и ARM64) и **Windows** (10 и 11, x64 и ARM64). Обе пока превью.
 
 ```sh
 brew install hitechteam/shum/shum
@@ -79,7 +101,7 @@ shum language           # показать текущий язык и досту
 
 Приоритет: `--lang`, `SHUM_LANG`, сохранённая настройка, язык системы. Системный язык определяется по `LC_ALL`, затем `LC_MESSAGES`, затем `LANG`; если они не заданы, используются предпочитаемые языки macOS. Для неподдерживаемого языка и `C`/`POSIX` выбирается английский. Китайские локали используют упрощённый китайский, португальские локали используют вариант Бразилии. Настройка хранится в `cli-settings.json` в каталоге данных, профиль для неё не создаётся. Команды, ID, поля JSON и сообщения не переводятся. Диагностика системы и зависимостей может оставаться на исходном языке. Отрисовка арабского письма зависит от терминала; порядок колонок интерфейса сохраняется.
 
-### Windows (превью 0.1.4)
+### Windows
 
 У версии для Windows своя нумерация, она начинается с 0.1.0. Windows 10 и 11, x64 и ARM64. Установка и обновление в PowerShell:
 
@@ -168,11 +190,11 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Клиент реализует черновик v1; синхронизация устройств впереди. Сборки для Windows и Linux пока в превью.
+CLI и Core имеют отдельные репозитории и выпуски. Все зависимости ядра закреплены одной Git-ревизией. CI запускается вручную. Один профиль работает сразу на нескольких устройствах: iPhone, приложение для компьютера, Shum Web и другие компьютеры. Сборки для Windows и Linux пока в превью.
 
-Версия 0.1.8 добавляет десять языков, управление меню с клавиатуры и историю приглашений, исправляет исчезновение изображений рядом с меню. Проверки описаны в [отчёте выпуска](docs/release-verification-0.1.8-r1.md). Сохранение разрешения Bluetooth и доставка на iPhone после этого выпуска ещё требуют проверки на устройстве.
+Что изменилось в каждой версии, смотрите в [Releases](https://github.com/hiTechTeam/Shum-CLI/releases).
 
-[Проверка выпуска](docs/release-verification-0.1.8-r1.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
+[getshum.tech](https://getshum.tech) · [iPhone](https://github.com/hiTechTeam/Shum-iOS) · [Компьютер и веб](https://github.com/hiTechTeam/Shum-App) · [Проверка выпуска](docs/release-verification-0.1.8-r1.md) · [Распространение](docs/distribution.md) · [Состояние протокола](docs/protocol-status.md) · [Подробная инструкция](docs/cli-guide.ru.md) · [Issues](https://github.com/hiTechTeam/Shum-CLI/issues)
 
 ## Лицензия
 
