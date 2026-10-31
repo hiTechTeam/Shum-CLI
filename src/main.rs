@@ -129,6 +129,14 @@ enum Commands {
         contact: String,
         text: String,
     },
+    #[command(about = t("Отправить стикер Shum по имени; список: shum stickers"))]
+    Sticker {
+        #[arg(value_name = "ID")]
+        contact: String,
+        sticker: String,
+    },
+    #[command(about = t("Показать наборы стикеров и их имена"))]
+    Stickers,
     #[command(about = t("Отметить чат прочитанным"))]
     Read {
         #[arg(value_name = "ID")]
@@ -856,6 +864,29 @@ async fn run(args: Args) -> Result<()> {
             text: text.clone(),
             reply: None,
         },
+        Some(Commands::Sticker { contact, sticker }) => Request::SendSticker {
+            contact: contact.clone(),
+            sticker: sticker.clone(),
+        },
+        Some(Commands::Stickers) => {
+            // Shum's sets are in Shum-Core; no service is needed to list them.
+            let sets: Value = serde_json::from_str(&shum_core::pool::sets_json())?;
+            if args.json {
+                return output(sets, true, "");
+            }
+            for set in sets.as_array().into_iter().flatten() {
+                println!("{}", palette.paint(Tone::Accent, terminal::text(&set["title"])));
+                for sticker in set["kinds"].as_array().into_iter().flatten() {
+                    println!(
+                        "  {} {}  {}",
+                        terminal::text(&sticker["emoji"]),
+                        terminal::text(&sticker["word"]),
+                        palette.paint(Tone::Command, terminal::text(&sticker["id"]))
+                    );
+                }
+            }
+            return Ok(());
+        }
         Some(Commands::Read { contact }) => Request::Read {
             contact: contact.clone(),
         },
