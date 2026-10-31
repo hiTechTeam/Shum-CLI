@@ -1,3 +1,24 @@
+# Shum CLI 0.1.23 · 31 October 2026
+
+* One profile on several devices, now in full: every device shares its name and avatar, which invitations it accepted or declined, and whom it blocked, when it starts, a few seconds after a change and every hour. The later decision wins. A step missed while the computer was off no longer stays missed.
+* Invitations accepted on the phone while this computer was off no longer hang here as new, and messages from those people are no longer dropped.
+* Installed 0.1.22 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.17 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах, теперь полностью: каждое устройство делится именем и аватаром, тем, какие приглашения оно приняло или отклонило и кого заблокировало, при запуске, через несколько секунд после изменения и раз в час. Побеждает более позднее решение. Шаг, пропущенный, пока компьютер был выключен, больше не теряется.
+* Приглашения, принятые на телефоне, пока компьютер был выключен, больше не висят здесь как новые, а сообщения от этих людей больше не выбрасываются.
+* Установленная 0.1.22 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.17 те же изменения.
+
 # Shum CLI 0.1.22 · 31 October 2026
 
 * One profile on several devices: a new name or avatar set on one device now stays. Before, two devices of one profile kept answering each other's edit with their own older card, so contacts saw the avatar flip back and forth.
