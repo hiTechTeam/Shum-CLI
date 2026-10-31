@@ -321,3 +321,57 @@ fn nested_profile_confirmation_only_covers_overlapping_thumbnails() {
         .unwrap();
     assert_eq!(placements(terminal.backend().buffer()), before);
 }
+
+#[test]
+fn a_photo_takes_its_place_in_the_history_and_is_asked_for() {
+    let mut snapshot = fixture();
+    snapshot["reactions"] = json!([]);
+    snapshot["messages"] = json!([{"id":"photo","contactID":PEER,"text":"Котик","outgoing":false,
+        "timestamp":1000,"status":"delivered",
+        "photo":{"width":1280,"height":960,"size":90000,"caption":true,"state":"ready"}}]);
+    let mut view = View::chat(PEER);
+    let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    let mut pictures = pictures();
+    terminal
+        .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+        .unwrap();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(screen.contains("Котик"), "the caption shows");
+    assert!(
+        screen.contains(t("Фото загружается")),
+        "its place waits for it"
+    );
+    assert_eq!(
+        pictures.take_wanted(),
+        vec!["photo".to_string()],
+        "and Shum-Core is asked once"
+    );
+    assert!(pictures.take_wanted().is_empty());
+
+    // Once it is here, the place shows the picture, not the words.
+    pictures.photo_arrived(
+        "photo".into(),
+        Some(image::RgbaImage::from_pixel(
+            8,
+            6,
+            image::Rgba([200, 30, 30, 255]),
+        )),
+    );
+    terminal
+        .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+        .unwrap();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(!screen.contains(t("Фото загружается")));
+}

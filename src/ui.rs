@@ -57,6 +57,8 @@ pub struct View {
     photos: Option<photos::Picker>,
     languages: Option<usize>,
     chat_rows: Vec<(Rect, String)>,
+    /// Photos read so far: a new one redraws the pictures.
+    photos_loaded: usize,
 }
 impl View {
     pub fn chat(id: &str) -> Self {
@@ -77,6 +79,12 @@ pub struct Pictures {
     pub(crate) colors: crate::display::Colors,
     cache: HashMap<(u64, u16, u16), StatefulProtocol>,
     reactions: HashMap<(usize, u16, u16), StatefulProtocol>,
+    /// Photos of messages, read from Shum-Core and made small; those the
+    /// history asked for and those already asked for.
+    photos: HashMap<String, image::RgbaImage>,
+    photo_states: HashMap<(String, u16, u16), StatefulProtocol>,
+    wanted: std::collections::HashSet<String>,
+    requested: std::collections::HashSet<String>,
     scene: Option<u64>,
     direct: Option<crate::graphics::DirectImages>,
     popup_covers: Vec<Rect>,
@@ -101,6 +109,10 @@ impl Pictures {
             colors,
             cache: HashMap::new(),
             reactions: HashMap::new(),
+            photos: HashMap::new(),
+            photo_states: HashMap::new(),
+            wanted: Default::default(),
+            requested: Default::default(),
             scene: None,
             direct: None,
             popup_covers: Vec::new(),
@@ -135,6 +147,77 @@ impl Pictures {
             state,
         );
     }
+    /// Photos the history wants and nobody asked Shum-Core for yet.
+    fn take_wanted(&mut self) -> Vec<String> {
+        let wanted: Vec<String> = self
+            .wanted
+            .drain()
+            .filter(|id| !self.requested.contains(id))
+            .collect();
+        self.requested.extend(wanted.iter().cloned());
+        wanted
+    }
+
+    /// A photo arrived; `None` when it could not be read, to ask again later.
+    fn photo_arrived(&mut self, id: String, image: Option<image::RgbaImage>) {
+        match image {
+            Some(image) => {
+                self.photos.insert(id, image);
+            }
+            None => {
+                self.requested.remove(&id);
+            }
+        }
+    }
+
+    /// Draws a message's photo into `area`; false while it is not here yet.
+    fn photo(&mut self, frame: &mut Frame<'_>, id: &str, area: Rect) -> bool {
+        let Some(image) = self.photos.get(id) else {
+            self.wanted.insert(id.to_owned());
+            return false;
+        };
+        let area = area.intersection(frame.area());
+        if area.is_empty() || covered_by(&self.popup_covers, area) {
+            return true;
+        }
+        if self.cell_avatars() || self.direct.is_some() {
+            // Half blocks: two image rows a cell, the cell's own colours.
+            let small = image::imageops::resize(
+                image,
+                u32::from(area.width),
+                u32::from(area.height) * 2,
+                image::imageops::FilterType::Triangle,
+            );
+            for y in 0..area.height {
+                for x in 0..area.width {
+                    let top = small.get_pixel(u32::from(x), u32::from(y) * 2);
+                    let bottom = small.get_pixel(u32::from(x), u32::from(y) * 2 + 1);
+                    frame.buffer_mut()[(area.x + x, area.y + y)]
+                        .set_char('▀')
+                        .set_fg(Color::Rgb(top[0], top[1], top[2]))
+                        .set_bg(Color::Rgb(bottom[0], bottom[1], bottom[2]));
+                }
+            }
+            return true;
+        }
+        if self.photo_states.len() > 64 {
+            self.photo_states.clear();
+        }
+        let state = self
+            .photo_states
+            .entry((id.to_owned(), area.width, area.height))
+            .or_insert_with(|| {
+                self.picker
+                    .new_resize_protocol(image::DynamicImage::ImageRgba8(image.clone()))
+            });
+        frame.render_stateful_widget(
+            StatefulImage::default().resize(Resize::Fit(None)),
+            area,
+            state,
+        );
+        true
+    }
+
     pub(crate) fn clear_on_change<B: ratatui::backend::Backend>(
         &mut self,
         terminal: &mut ratatui::Terminal<B>,
@@ -769,6 +852,7 @@ fn draw_content(
         );
         let mut lines = Vec::new();
         let mut reaction_icons = Vec::new();
+        let mut photo_slots: Vec<(String, usize, u16, u16, u16)> = Vec::new();
         let mut visual_rows = 0;
         for m in crate::invitations::timeline(snapshot, id) {
             if m["kind"].is_string() {
@@ -804,7 +888,12 @@ fn draw_content(
                 } else {
                     String::new()
                 };
-                format!("[{}]{} · Ctrl+O", t("Фото"), caption)
+                let state = match text(&m["photo"]["state"]) {
+                    "loading" => t("Фото загружается"),
+                    "missing" => t("Фото не дошло"),
+                    _ => t("Фото"),
+                };
+                format!("[{state}]{caption} · Ctrl+O")
             } else if m["sticker"].is_string() {
                 format!("[{}] {}", t("Стикер"), safe(text(&m["text"])))
             } else {
@@ -823,6 +912,21 @@ fn draw_content(
             visual_rows += Paragraph::new(lines[message_start..].to_vec())
                 .wrap(Wrap { trim: false })
                 .line_count(history.width);
+            // The photo itself, under its line, as wide as fits and as tall
+            // as its proportions ask; a terminal cell is about twice as tall
+            // as it is wide.
+            if !ascii && m["photo"]["state"] == "ready" && history.width >= 12 {
+                let cols = history.width.saturating_sub(2).min(32);
+                let ratio = m["photo"]["height"].as_f64().unwrap_or(3.0)
+                    / m["photo"]["width"].as_f64().unwrap_or(4.0).max(1.0);
+                let rows = ((f64::from(cols) * ratio) / 2.0).round().clamp(4.0, 14.0) as u16;
+                let x = if own { history.width - cols } else { 0 };
+                photo_slots.push((text(&m["id"]).into(), visual_rows, x, cols, rows));
+                for _ in 0..rows {
+                    lines.push(Line::from(""));
+                }
+                visual_rows += usize::from(rows);
+            }
             let (mut reaction_lines, icons) = history_reactions::rows(
                 snapshot,
                 m,
@@ -848,6 +952,25 @@ fn draw_content(
             .saturating_sub(view.scroll as usize)
             .min(u16::MAX as usize) as u16;
         frame.render_widget(paragraph.scroll((offset, 0)), history);
+        for (id, row, x, cols, rows) in photo_slots {
+            // Only a photo wholly in view: a picture must not cross the border.
+            if row >= usize::from(offset)
+                && row + usize::from(rows) <= usize::from(offset) + usize::from(history.height)
+            {
+                let area = Rect::new(
+                    history.x + x,
+                    history.y + (row - usize::from(offset)) as u16,
+                    cols,
+                    rows,
+                );
+                if !pictures.photo(frame, &id, area) {
+                    frame.render_widget(
+                        Paragraph::new(t("Фото загружается")).style(Style::default().fg(muted)),
+                        Rect::new(area.x, area.y, area.width, 1),
+                    );
+                }
+            }
+        }
         if pictures.image_reactions() {
             for icon in reaction_icons {
                 use history_reactions::{PNG_HEIGHT, PNG_WIDTH};
@@ -1716,12 +1839,13 @@ fn history_layout(snapshot: &Value, view: &View, ascii: bool) -> String {
         .into_iter()
         .flatten()
         .any(|r| messages.iter().any(|m| m["id"] == r["messageID"]));
-    if !has_reactions {
+    let has_photos = messages.iter().any(|m| m["photo"].is_object());
+    if !has_reactions && !has_photos {
         return String::new();
     }
     let layout: Vec<_> = messages.into_iter().map(|m| serde_json::json!({
         "id": m["id"], "text": m["text"], "timestamp": m["timestamp"],
-        "outgoing": m["outgoing"], "replyText": m["reply"]["text"],
+        "outgoing": m["outgoing"], "replyText": m["reply"]["text"], "photo": m["photo"],
         "markerWidth": unicode_width::UnicodeWidthStr::width(delivery_marker(m, ascii).as_str()),
     })).collect();
     serde_json::to_string(&layout).expect("message layout JSON")
@@ -1750,6 +1874,8 @@ fn graphics_scene(profile: &str, snapshot: &Value, view: &View, ascii: bool) -> 
             view.profiles.is_some(),
             view.form.is_some(),
             view.reactions.is_some(),
+            view.photos.is_some(),
+            view.photos_loaded,
             view.languages.is_some(),
             crate::i18n::current(),
         ),
@@ -1785,6 +1911,19 @@ fn graphics_scene(profile: &str, snapshot: &Value, view: &View, ascii: bool) -> 
 }
 
 #[allow(clippy::too_many_arguments)]
+/// A message's photo from Shum-Core, made small for the terminal.
+async fn read_photo(root: &Path, profile: &str, id: &str) -> Option<image::RgbaImage> {
+    use base64::Engine as _;
+    let answer = ipc::request(root, profile, Request::Photo { message: id.into() })
+        .await
+        .ok()?;
+    let jpeg = base64::engine::general_purpose::STANDARD
+        .decode(text(&answer["photo"]))
+        .ok()?;
+    let image = image::load_from_memory_with_format(&jpeg, image::ImageFormat::Jpeg).ok()?;
+    Some(image.thumbnail(640, 640).to_rgba8())
+}
+
 async fn run_loop(
     root: &Path,
     profile: &mut String,
@@ -1797,9 +1936,28 @@ async fn run_loop(
     let (mut worker, mut updates, mut activity) = feed(root, profile);
     let mut pending: Option<Pending> = None;
     let mut previews = tokio::task::JoinSet::new();
+    let mut photo_jobs: tokio::task::JoinSet<(String, Option<image::RgbaImage>)> =
+        tokio::task::JoinSet::new();
     loop {
         while let Some(Ok((id, Some(detail)))) = previews.try_join_next() {
             view.profile_details.insert(id, detail);
+        }
+        while let Some(Ok((id, image))) = photo_jobs.try_join_next() {
+            if image.is_some() {
+                view.photos_loaded += 1;
+            }
+            pictures.photo_arrived(id, image);
+        }
+        for id in pictures.take_wanted() {
+            let (root, profile) = (root.to_owned(), profile.clone());
+            photo_jobs.spawn(async move {
+                let image = read_photo(&root, &profile, &id).await;
+                if image.is_none() {
+                    // Asked again a little later, not every frame.
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                }
+                (id, image)
+            });
         }
         if updates.has_changed().unwrap_or(false) {
             if let Some(value) = updates.borrow_and_update().clone() {
