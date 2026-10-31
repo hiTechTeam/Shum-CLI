@@ -1,5 +1,6 @@
 mod history_reactions;
 mod languages;
+mod photos;
 pub(crate) mod reaction_art;
 mod reactions;
 #[cfg(test)]
@@ -53,6 +54,7 @@ pub struct View {
     pub profile_selected: usize,
     form: Option<Form>,
     reactions: Option<reactions::Picker>,
+    photos: Option<photos::Picker>,
     languages: Option<usize>,
     chat_rows: Vec<(Rect, String)>,
 }
@@ -329,6 +331,9 @@ fn menu_covers(area: Rect, view: &View, ascii: bool, include_profiles: bool) -> 
     }
     if view.reactions.is_some() {
         covers.push(reactions::popup_area(area));
+    }
+    if view.photos.is_some() {
+        covers.push(photos::popup_area(area));
     }
     if view.languages.is_some() {
         covers.push(languages::popup_area(area));
@@ -799,7 +804,7 @@ fn draw_content(
                 } else {
                     String::new()
                 };
-                format!("[{}]{} · shum photo {}", t("Фото"), caption, text(&m["id"]))
+                format!("[{}]{} · Ctrl+O", t("Фото"), caption)
             } else if m["sticker"].is_string() {
                 format!("[{}] {}", t("Стикер"), safe(text(&m["text"])))
             } else {
@@ -1132,6 +1137,7 @@ fn draw_content(
         }
     }
     reactions::draw(frame, snapshot, view, ascii);
+    photos::draw(frame, snapshot, view, ascii);
     languages::draw(frame, view, ascii);
     if let Some(form) = &view.form {
         let title = match form {
@@ -1226,6 +1232,8 @@ pub enum Action {
     Language(String),
     Languages,
     Info(String, String),
+    /// Saves a message's photo to this path and opens it.
+    SavePhoto(String, std::path::PathBuf),
 }
 fn open_contact(view: &mut View, id: String) {
     view.opened = Some(id);
@@ -1254,8 +1262,21 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
     if view.reactions.is_some() {
         return reactions::handle(view, snapshot, key);
     }
+    if view.photos.is_some() {
+        return photos::handle(view, snapshot, key);
+    }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return Ok(match shortcut(key.code) {
+            KeyCode::Char('o')
+                if view.qr.is_none()
+                    && !view.help
+                    && view.info.is_none()
+                    && view.form.is_none()
+                    && view.profiles.is_none() =>
+            {
+                photos::open(view, snapshot)?;
+                Action::None
+            }
             KeyCode::Char('r')
                 if view.qr.is_none()
                     && !view.help
@@ -1405,6 +1426,11 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
                 reactions::open(view, snapshot)?;
                 return Ok(Action::None);
             }
+            if view.input.trim() == "/photo" {
+                photos::open(view, snapshot)?;
+                view.input.clear();
+                return Ok(Action::None);
+            }
             let action = parse_command(&view.input, view.opened.as_deref(), snapshot)?;
             if matches!(action, Action::Languages) {
                 languages::open(view, true);
@@ -1524,6 +1550,8 @@ struct Pending {
     task: tokio::task::JoinHandle<Result<Option<(String, Value)>>>,
     clear_input: bool,
     input: String,
+    /// What to say once it is done, instead of "Done".
+    done: Option<String>,
 }
 impl Drop for Pending {
     fn drop(&mut self) {
@@ -1801,7 +1829,7 @@ async fn run_loop(
                     view.form = None;
                     view.profiles = None;
                     view.scroll = 0;
-                    view.status = t("Готово").into();
+                    view.status = job.done.take().unwrap_or_else(|| t("Готово").into());
                 }
                 Err(error) => view.status = error.to_string(),
             }
@@ -1959,11 +1987,34 @@ async fn run_loop(
                 }
                 let root = root.to_owned();
                 let current = profile.clone();
-                let clear_input = !matches!(&action, Action::Request(Request::Reaction { .. }));
+                let clear_input = !matches!(
+                    &action,
+                    Action::Request(Request::Reaction { .. }) | Action::SavePhoto(..)
+                );
+                let done = match &action {
+                    Action::SavePhoto(_, path) => {
+                        Some(format!("{} {}", t("Фото сохранено:"), path.display()))
+                    }
+                    _ => None,
+                };
                 let task = tokio::spawn(async move {
                     match action {
                         Action::Request(request) => {
                             ipc::request(&root, &current, request).await?;
+                            Ok(None)
+                        }
+                        Action::SavePhoto(message, path) => {
+                            use base64::Engine as _;
+                            let answer =
+                                ipc::request(&root, &current, Request::Photo { message }).await?;
+                            let jpeg = base64::engine::general_purpose::STANDARD
+                                .decode(text(&answer["photo"]))
+                                .context(t("Фото не прочитать"))?;
+                            if let Some(folder) = path.parent() {
+                                std::fs::create_dir_all(folder)?;
+                            }
+                            std::fs::write(&path, jpeg)?;
+                            photos::show(&path);
                             Ok(None)
                         }
                         Action::Switch(id) => {
@@ -2001,6 +2052,7 @@ async fn run_loop(
                     task,
                     clear_input,
                     input: view.input.clone(),
+                    done,
                 });
                 view.status = t("Выполняется… Ctrl+Q: выход").into();
             }
@@ -2031,6 +2083,7 @@ fn help_text() -> String {
         ("Ctrl+P", t(" Профили ").trim()),
         ("Ctrl+L / /language", t("Язык интерфейса")),
         ("Ctrl+R / /react", t("Выберите сообщение")),
+        ("Ctrl+O / /photo", t("Фото в чате")),
         ("i / /qr", t("Мой QR · Esc закрыть")),
         (
             "a / /add <link> / /add --image <png>",
