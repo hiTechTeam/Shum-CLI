@@ -791,7 +791,20 @@ fn draw_content(
                     Style::default().fg(muted),
                 )));
             }
-            let content = safe(text(&m["text"]));
+            // A photo shows as a line to save it with `shum photo`; a
+            // sticker as its emoji and word, which is its text.
+            let content = if m["photo"].is_object() {
+                let caption = if m["photo"]["caption"] == true {
+                    format!(" {}", safe(text(&m["text"])))
+                } else {
+                    String::new()
+                };
+                format!("[{}]{} · shum photo {}", t("Фото"), caption, text(&m["id"]))
+            } else if m["sticker"].is_string() {
+                format!("[{}] {}", t("Стикер"), safe(text(&m["text"])))
+            } else {
+                safe(text(&m["text"])).to_string()
+            };
             let meta = format!(" {} {}", stamp(&m["timestamp"]), delivery_marker(m, ascii));
             let line = Line::from(vec![
                 Span::raw(content),

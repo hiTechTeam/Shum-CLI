@@ -145,6 +145,18 @@ enum Commands {
     },
     #[command(about = t("Отменить отправку сообщения"))]
     Cancel { message: String },
+    #[command(about = t("Удалить своё сообщение; --everyone и у собеседника"))]
+    Delete {
+        message: String,
+        #[arg(long)]
+        everyone: bool,
+    },
+    #[command(about = t("Сохранить фото из сообщения в файл"))]
+    Photo {
+        message: String,
+        #[arg(long, value_name = "FILE")]
+        out: Option<PathBuf>,
+    },
     #[command(about = t("Заблокировать контакт; --undo разблокировать"))]
     Block {
         #[arg(value_name = "ID")]
@@ -866,6 +878,13 @@ async fn run(args: Args) -> Result<()> {
         Some(Commands::Cancel { message }) => Request::Cancel {
             message: message.clone(),
         },
+        Some(Commands::Delete { message, everyone }) => Request::Delete {
+            message: message.clone(),
+            everyone: *everyone,
+        },
+        Some(Commands::Photo { message, .. }) => Request::Photo {
+            message: message.clone(),
+        },
         Some(Commands::Block { contact, undo }) => Request::Block {
             contact: contact.clone(),
             blocked: !*undo,
@@ -1017,6 +1036,20 @@ async fn run(args: Args) -> Result<()> {
         Some(Commands::About) => {
             let description = terminal::about(&value, &root, args.ascii);
             output(value, args.json, &description)
+        }
+        Some(Commands::Photo { message, out }) => {
+            let jpeg = base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                terminal::text(&value["photo"]),
+            )
+            .context(t("Фото не прочитать"))?;
+            let path = out.unwrap_or_else(|| PathBuf::from(format!("shum-{message}.jpg")));
+            std::fs::write(&path, jpeg)?;
+            output(
+                json!({ "saved": path }),
+                args.json,
+                &palette.paint(Tone::Accent, path.display().to_string()),
+            )
         }
         Some(Commands::Status) | Some(Commands::Daemon { .. }) => {
             let description = terminal::status(&value, &root, args.ascii);

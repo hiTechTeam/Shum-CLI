@@ -35,7 +35,7 @@ impl Picker {
             .iter()
             .find(|r| r["messageID"] == self.message && r["personID"] == own)
             .and_then(|r| serde_json::from_value(r["mark"]["reaction"].clone()).ok())
-            .and_then(|kind| reaction_art::KINDS.iter().position(|k| *k == kind))
+            .and_then(|kind| reaction_art::kinds().iter().position(|k| *k == kind))
     }
 }
 
@@ -96,10 +96,19 @@ pub(super) fn handle(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result
             };
             picker.message = text(&messages[next]["id"]).into();
         }
-        (Some(i), KeyCode::Up | KeyCode::Left) => picker.reaction = Some((i + 7) % 8),
-        (Some(i), KeyCode::Down | KeyCode::Right) => picker.reaction = Some((i + 1) % 8),
+        (Some(i), KeyCode::Up | KeyCode::Left) => {
+            let n = reaction_art::kinds().len();
+            picker.reaction = Some((i + n - 1) % n)
+        }
+        (Some(i), KeyCode::Down | KeyCode::Right) => {
+            picker.reaction = Some((i + 1) % reaction_art::kinds().len())
+        }
+        (Some(i), KeyCode::PageUp) => picker.reaction = Some(i.saturating_sub(8)),
+        (Some(i), KeyCode::PageDown) => {
+            picker.reaction = Some((i + 8).min(reaction_art::kinds().len() - 1))
+        }
         (Some(_), KeyCode::Home) => picker.reaction = Some(0),
-        (Some(_), KeyCode::End) => picker.reaction = Some(7),
+        (Some(_), KeyCode::End) => picker.reaction = Some(reaction_art::kinds().len() - 1),
         (_, KeyCode::Enter) if position.is_none() => {
             view.reactions = Some(picker);
             bail!(
@@ -113,7 +122,7 @@ pub(super) fn handle(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result
         (Some(i), KeyCode::Enter) => {
             return Ok(Action::Request(crate::runtime::Request::Reaction {
                 message: picker.message,
-                reaction: reaction_art::KINDS[i],
+                reaction: reaction_art::kinds()[i],
             }));
         }
         _ => {}
@@ -209,7 +218,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, snapshot: &Value, view: &View, ascii: 
         if !ascii {
             reaction_art::draw(
                 frame,
-                reaction_art::KINDS[index],
+                index,
                 Rect::new(
                     inner.x + label_width + 2,
                     top,

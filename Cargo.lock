@@ -3751,7 +3751,7 @@ dependencies = [
 [[package]]
 name = "shum-core"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=f0853c76ef4f6a13c53af3f12dfdf3481f94991d#f0853c76ef4f6a13c53af3f12dfdf3481f94991d"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=29ac53b2581e76de1d96afade0a79ebc5b097a88#29ac53b2581e76de1d96afade0a79ebc5b097a88"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -3777,7 +3777,7 @@ dependencies = [
 [[package]]
 name = "shum-session"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=f0853c76ef4f6a13c53af3f12dfdf3481f94991d#f0853c76ef4f6a13c53af3f12dfdf3481f94991d"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=29ac53b2581e76de1d96afade0a79ebc5b097a88#29ac53b2581e76de1d96afade0a79ebc5b097a88"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3800,7 +3800,7 @@ dependencies = [
 [[package]]
 name = "shum-store"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=f0853c76ef4f6a13c53af3f12dfdf3481f94991d#f0853c76ef4f6a13c53af3f12dfdf3481f94991d"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=29ac53b2581e76de1d96afade0a79ebc5b097a88#29ac53b2581e76de1d96afade0a79ebc5b097a88"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -3823,7 +3823,7 @@ dependencies = [
 [[package]]
 name = "shum-transport-ble"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=f0853c76ef4f6a13c53af3f12dfdf3481f94991d#f0853c76ef4f6a13c53af3f12dfdf3481f94991d"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=29ac53b2581e76de1d96afade0a79ebc5b097a88#29ac53b2581e76de1d96afade0a79ebc5b097a88"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3842,7 +3842,7 @@ dependencies = [
 [[package]]
 name = "shum-transport-nostr"
 version = "0.1.5"
-source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=f0853c76ef4f6a13c53af3f12dfdf3481f94991d#f0853c76ef4f6a13c53af3f12dfdf3481f94991d"
+source = "git+https://github.com/hiTechTeam/Shum-Core.git?rev=29ac53b2581e76de1d96afade0a79ebc5b097a88#29ac53b2581e76de1d96afade0a79ebc5b097a88"
 dependencies = [
  "base64 0.22.1",
  "futures-util",

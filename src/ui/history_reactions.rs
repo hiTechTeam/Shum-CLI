@@ -55,7 +55,7 @@ pub(super) fn rows(
         else {
             continue;
         };
-        let Some(index) = reaction_art::KINDS.iter().position(|k| *k == kind) else {
+        let Some(index) = reaction_art::kinds().iter().position(|k| *k == kind) else {
             continue;
         };
         let name = safe(name);
@@ -178,14 +178,8 @@ pub(super) fn rows(
 }
 
 fn pixel_row(index: usize, y: usize) -> Vec<Span<'static>> {
-    let (rows, colors) = reaction_art::art(reaction_art::KINDS[index]);
-    let color = |x: usize, y: usize| {
-        colors
-            .iter()
-            .find(|(s, _)| *s == rows[y].as_bytes()[x])
-            .map(|(_, c)| Color::Rgb((c >> 16) as u8, (c >> 8) as u8, *c as u8))
-            .unwrap_or(Color::Rgb(10, 13, 11))
-    };
+    let color =
+        |x: usize, y: usize| reaction_art::pixel(index, x, y).unwrap_or(Color::Rgb(10, 13, 11));
     (0..12)
         .map(|x| {
             let top = color(x, y * 2);
