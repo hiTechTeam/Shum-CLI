@@ -1,3 +1,30 @@
+# Shum CLI 0.1.22 · 31 October 2026
+
+* One profile on several devices: a new name or avatar set on one device now stays. Before, two devices of one profile kept answering each other's edit with their own older card, so contacts saw the avatar flip back and forth.
+* People with the same name keep their place in the lists instead of swapping every second.
+* Someone heard only through other devices leaves the nearby list when they go, instead of staying there.
+* An invitation sent without internet says it waits for a connection, leaves by itself once there is one, and can be cancelled until then. Copies for your other devices survive a restart.
+* Windows: delivery marks you can read in the console font, Tab moves between tabs from the list, and Ctrl+C in a chat no longer closes it.
+* Installed 0.1.21 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.16 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Один профиль на нескольких устройствах: новое имя или аватар, заданные на одном устройстве, теперь сохраняются. Раньше два устройства одного профиля отвечали на правку друг друга своей старой карточкой, и у контактов аватар менялся туда-обратно.
+* Люди с одинаковым именем стоят в списках на своём месте и не меняются местами каждую секунду.
+* Тот, кого было слышно только через другие устройства, уходит из списка «Рядом», когда уходит сам.
+* Приглашение, отправленное без интернета, помечено «ждёт связи», уходит само, когда связь появится, и до этого его можно отменить. Копии для других ваших устройств переживают перезапуск.
+* Windows: отметки доставки читаются в шрифте консоли, Tab из списка переключает вкладки, Ctrl+C в чате больше его не закрывает.
+* Установленная 0.1.21 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.16 те же изменения.
+
 # Shum CLI 0.1.21 · 26 October 2026
 
 * One profile on several devices, continued: accepting, declining or sending an invitation on one device shows on the others, so an invitation answered in the browser no longer waits on the phone.
