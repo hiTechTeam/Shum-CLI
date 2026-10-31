@@ -1,3 +1,24 @@
+# Shum CLI 0.1.25 · 1 November 2026
+
+* Photos show in the chat itself: under their line, as a picture where the terminal shows images (iTerm2, kitty, WezTerm, Ghostty) and in coloured half blocks elsewhere. Until a photo arrives its place says so.
+* Choose a photo as you choose a reaction: Ctrl+O or `/photo` lists the chat's photos, Enter saves the chosen one to Downloads/Shum and opens it. No long IDs to type.
+* Installed 0.1.24 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.19 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Фото видно прямо в чате: под своей строкой, картинкой в терминалах, которые умеют их показывать (iTerm2, kitty, WezTerm, Ghostty), и цветными полублоками в остальных. Пока фото не пришло, на его месте надпись.
+* Фото выбирается как реакция: Ctrl+O или `/photo` показывают фото чата, Enter сохраняет выбранное в «Загрузки/Shum» и открывает его. Длинные номера вводить не нужно.
+* Установленная 0.1.24 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.19 те же изменения.
+
 # Shum CLI 0.1.24 · 31 October 2026
 
 * 180 reactions: every set of Shum's emoji and characters, not only the first eight. Each shows its emoji, word and picture; PageUp and PageDown move by eight.
