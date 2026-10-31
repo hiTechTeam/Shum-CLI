@@ -1,3 +1,28 @@
+# Shum CLI 0.1.24 · 31 October 2026
+
+* 180 reactions: every set of Shum's emoji and characters, not only the first eight. Each shows its emoji, word and picture; PageUp and PageDown move by eight.
+* Photos and stickers from the phone: a photo shows as a line, `shum photo <id> [--out file]` saves it; a sticker shows as its emoji and word.
+* Send stickers: `shum stickers` lists Shum's sets with their names, `shum sticker <id> <name>` sends one.
+* Delete your own message: `shum delete <id>` here and on your other devices, `--everyone` at the contact too, read or not.
+* Installed 0.1.23 updates to this version on its own; its background service restarts for the new commands.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.18 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* 180 реакций: все наборы эмодзи и персонажей Shum, а не только первые восемь. У каждой эмодзи, слово и картинка; PageUp и PageDown листают по восемь.
+* Фото и стикеры с телефона: фото показывается строкой, `shum photo <id> [--out файл]` сохраняет его; стикер показывается эмодзи и словом.
+* Отправка стикеров: `shum stickers` показывает наборы с именами, `shum sticker <id> <имя>` отправляет.
+* Удаление своего сообщения: `shum delete <id>` здесь и на других ваших устройствах, с `--everyone` и у собеседника, даже прочитанное.
+* Установленная 0.1.23 обновится до этой версии сама; её фоновая служба перезапустится ради новых команд.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.18 те же изменения.
+
 # Shum CLI 0.1.23 · 31 October 2026
 
 * One profile on several devices, now in full: every device shares its name and avatar, which invitations it accepted or declined, and whom it blocked, when it starts, a few seconds after a change and every hour. The later decision wins. A step missed while the computer was off no longer stays missed.
