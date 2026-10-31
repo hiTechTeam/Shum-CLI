@@ -1,6 +1,7 @@
 # Shum CLI 0.1.25 · 1 November 2026
 
 * Photos show in the chat itself: under their line, as a picture where the terminal shows images (iTerm2, kitty, WezTerm, Ghostty) and in coloured half blocks elsewhere. Until a photo arrives its place says so.
+* Stickers show as their pictures in the chat, not only as their emoji and word.
 * Choose a photo as you choose a reaction: Ctrl+O or `/photo` lists the chat's photos, Enter saves the chosen one to Downloads/Shum and opens it. No long IDs to type.
 * Installed 0.1.24 updates to this version on its own.
 
@@ -14,6 +15,7 @@ brew upgrade shum
 ## Русский
 
 * Фото видно прямо в чате: под своей строкой, картинкой в терминалах, которые умеют их показывать (iTerm2, kitty, WezTerm, Ghostty), и цветными полублоками в остальных. Пока фото не пришло, на его месте надпись.
+* Стикеры видны в чате картинкой, а не только эмодзи и словом.
 * Фото выбирается как реакция: Ctrl+O или `/photo` показывают фото чата, Enter сохраняет выбранное в «Загрузки/Shum» и открывает его. Длинные номера вводить не нужно.
 * Установленная 0.1.24 обновится до этой версии сама.
 

@@ -375,3 +375,28 @@ fn a_photo_takes_its_place_in_the_history_and_is_asked_for() {
         .collect();
     assert!(!screen.contains(t("Фото загружается")));
 }
+
+#[test]
+fn a_sticker_shows_as_its_picture_in_the_history() {
+    let mut snapshot = fixture();
+    snapshot["reactions"] = json!([]);
+    snapshot["messages"] = json!([{"id":"s","contactID":PEER,"text":"☕ чай","outgoing":false,
+        "timestamp":1000,"status":"delivered","sticker":"bunChay"}]);
+    let mut view = View::chat(PEER);
+    let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    let mut pictures = pictures();
+    terminal
+        .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+        .unwrap();
+    let painted = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .filter(|c| c.symbol() == "▀")
+        .count();
+    assert!(
+        painted > 20,
+        "the sticker is drawn, not only named: {painted}"
+    );
+}

@@ -176,9 +176,57 @@ impl Pictures {
             self.wanted.insert(id.to_owned());
             return false;
         };
+        let image = image.clone();
+        self.picture(
+            frame,
+            id,
+            &image,
+            area,
+            image::imageops::FilterType::Triangle,
+        );
+        true
+    }
+
+    /// A sticker of Shum's sets, drawn from Shum-Core at once.
+    fn sticker(&mut self, frame: &mut Frame<'_>, id: &str, area: Rect) {
+        let Some(sticker) = shum_core::pool::sticker(id) else {
+            return;
+        };
+        let side = sticker.art.size as u32;
+        let Some(image) =
+            image::RgbaImage::from_raw(side, side, shum_core::pool::rgba(&sticker.art))
+        else {
+            return;
+        };
+        // Enlarged by whole cells first so its pixel edges stay sharp.
+        let image = image::imageops::resize(
+            &image,
+            side * 8,
+            side * 8,
+            image::imageops::FilterType::Nearest,
+        );
+        self.picture(
+            frame,
+            &format!("sticker:{id}"),
+            &image,
+            area,
+            image::imageops::FilterType::Nearest,
+        );
+    }
+
+    /// A picture in `area`: through the terminal's images where it has them,
+    /// in half blocks elsewhere; transparent pixels leave the cell as it is.
+    fn picture(
+        &mut self,
+        frame: &mut Frame<'_>,
+        key: &str,
+        image: &image::RgbaImage,
+        area: Rect,
+        filter: image::imageops::FilterType,
+    ) {
         let area = area.intersection(frame.area());
         if area.is_empty() || covered_by(&self.popup_covers, area) {
-            return true;
+            return;
         }
         if self.cell_avatars() || self.direct.is_some() {
             // Half blocks: two image rows a cell, the cell's own colours.
@@ -186,26 +234,35 @@ impl Pictures {
                 image,
                 u32::from(area.width),
                 u32::from(area.height) * 2,
-                image::imageops::FilterType::Triangle,
+                filter,
             );
             for y in 0..area.height {
                 for x in 0..area.width {
                     let top = small.get_pixel(u32::from(x), u32::from(y) * 2);
                     let bottom = small.get_pixel(u32::from(x), u32::from(y) * 2 + 1);
-                    frame.buffer_mut()[(area.x + x, area.y + y)]
-                        .set_char('▀')
-                        .set_fg(Color::Rgb(top[0], top[1], top[2]))
-                        .set_bg(Color::Rgb(bottom[0], bottom[1], bottom[2]));
+                    if top[3] < 128 && bottom[3] < 128 {
+                        continue;
+                    }
+                    let cell = &mut frame.buffer_mut()[(area.x + x, area.y + y)];
+                    let background = cell.bg;
+                    let color = |p: &image::Rgba<u8>| {
+                        if p[3] < 128 {
+                            background
+                        } else {
+                            Color::Rgb(p[0], p[1], p[2])
+                        }
+                    };
+                    cell.set_char('▀').set_fg(color(top)).set_bg(color(bottom));
                 }
             }
-            return true;
+            return;
         }
         if self.photo_states.len() > 64 {
             self.photo_states.clear();
         }
         let state = self
             .photo_states
-            .entry((id.to_owned(), area.width, area.height))
+            .entry((key.to_owned(), area.width, area.height))
             .or_insert_with(|| {
                 self.picker
                     .new_resize_protocol(image::DynamicImage::ImageRgba8(image.clone()))
@@ -215,7 +272,6 @@ impl Pictures {
             area,
             state,
         );
-        true
     }
 
     pub(crate) fn clear_on_change<B: ratatui::backend::Backend>(
@@ -853,6 +909,7 @@ fn draw_content(
         let mut lines = Vec::new();
         let mut reaction_icons = Vec::new();
         let mut photo_slots: Vec<(String, usize, u16, u16, u16)> = Vec::new();
+        let mut sticker_slots: Vec<(String, usize, u16, u16, u16)> = Vec::new();
         let mut visual_rows = 0;
         for m in crate::invitations::timeline(snapshot, id) {
             if m["kind"].is_string() {
@@ -927,6 +984,16 @@ fn draw_content(
                 }
                 visual_rows += usize::from(rows);
             }
+            // A sticker shows as itself, square, on its side of the chat.
+            if !ascii && m["sticker"].is_string() && history.width >= 16 {
+                let (cols, rows) = (16, 8);
+                let x = if own { history.width - cols } else { 0 };
+                sticker_slots.push((text(&m["sticker"]).into(), visual_rows, x, cols, rows));
+                for _ in 0..rows {
+                    lines.push(Line::from(""));
+                }
+                visual_rows += usize::from(rows);
+            }
             let (mut reaction_lines, icons) = history_reactions::rows(
                 snapshot,
                 m,
@@ -969,6 +1036,19 @@ fn draw_content(
                         Rect::new(area.x, area.y, area.width, 1),
                     );
                 }
+            }
+        }
+        for (id, row, x, cols, rows) in sticker_slots {
+            if row >= usize::from(offset)
+                && row + usize::from(rows) <= usize::from(offset) + usize::from(history.height)
+            {
+                let area = Rect::new(
+                    history.x + x,
+                    history.y + (row - usize::from(offset)) as u16,
+                    cols,
+                    rows,
+                );
+                pictures.sticker(frame, &id, area);
             }
         }
         if pictures.image_reactions() {
@@ -1839,7 +1919,9 @@ fn history_layout(snapshot: &Value, view: &View, ascii: bool) -> String {
         .into_iter()
         .flatten()
         .any(|r| messages.iter().any(|m| m["id"] == r["messageID"]));
-    let has_photos = messages.iter().any(|m| m["photo"].is_object());
+    let has_photos = messages
+        .iter()
+        .any(|m| m["photo"].is_object() || m["sticker"].is_string());
     if !has_reactions && !has_photos {
         return String::new();
     }
