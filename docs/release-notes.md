@@ -1,3 +1,26 @@
+# Shum CLI 0.1.26 · 1 November 2026
+
+* Shum has its own relay, `wss://relay.getshum.tech`, first in the list beside four independent Nostr relays. Profiles with the earlier default list switch on their own; a list you chose stays.
+* The status line and `/status` show relays as connected out of all, for example `4/5`.
+* A new name reaches your contacts: an older card a contact still held no longer overwrites it.
+* Installed 0.1.25 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.20 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* У Shum появилось своё реле `wss://relay.getshum.tech`, оно первое в списке, рядом с четырьмя независимыми реле Nostr. Профили со старым списком по умолчанию переключатся сами, выбранный вами список не меняется.
+* Строка состояния и `/status` показывают реле как «подключено из всех», например `4/5`.
+* Новое имя доходит до контактов: старая карточка, сохранённая у контакта, больше его не перебивает.
+* Установленная 0.1.25 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.20 те же изменения.
+
 # Shum CLI 0.1.25 · 1 November 2026
 
 * Photos show in the chat itself: under their line, as a picture where the terminal shows images (iTerm2, kitty, WezTerm, Ghostty) and in coloured half blocks elsewhere. Until a photo arrives its place says so.

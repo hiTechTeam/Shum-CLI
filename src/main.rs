@@ -875,7 +875,10 @@ async fn run(args: Args) -> Result<()> {
                 return output(sets, true, "");
             }
             for set in sets.as_array().into_iter().flatten() {
-                println!("{}", palette.paint(Tone::Accent, terminal::text(&set["title"])));
+                println!(
+                    "{}",
+                    palette.paint(Tone::Accent, terminal::text(&set["title"]))
+                );
                 for sticker in set["kinds"].as_array().into_iter().flatten() {
                     println!(
                         "  {} {}  {}",

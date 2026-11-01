@@ -577,12 +577,12 @@ fn draw_content(
         Constraint::Length(if view.command_mode { 5 } else { 2 }),
     ])
     .split(area);
-    let relay = snapshot["relays"].as_array().map_or(0, Vec::len);
+    let relay = relay_count(snapshot);
     let all = contacts(snapshot, 0);
     let nearby = all.iter().filter(|c| c["nearby"] == true).count();
     frame.render_widget(
         Paragraph::new(crate::i18n::format(
-            " Shum  {}   релеев {relay}   рядом {nearby}   {}",
+            " Shum  {}   реле {relay}   рядом {nearby}   {}",
             &[
                 ("0", safe(text(&snapshot["card"]["name"])).to_string()),
                 ("relay", format!("{}", relay)),
@@ -1728,7 +1728,7 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/chats","--nearby"]|["/nearby"]=>return Ok(Action::Tab(1)),
         ["/chats","--invites"]=>return Ok(Action::Tab(2)),
         ["/chats","--unread"]=>return Ok(Action::Tab(3)),
-        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),crate::i18n::format("Версия {} · протокол v1\nПрофиль: {}\nРелеев подключено: {}\n{}\nPush API: {}\n{}", &[("0", env!("SHUM_VERSION").to_string()), ("1", safe(text(&snapshot["card"]["name"])).to_string()), ("2", format!("{}", snapshot["relays"].as_array().map_or(0,Vec::len))), ("3", bluetooth_status(snapshot).to_string()), ("4", crate::terminal::push_status(snapshot).to_string()), ("5", safe(text(&snapshot["error"])).to_string())]))),
+        ["/status"|"/about"]=>return Ok(Action::Info("Shum".into(),crate::i18n::format("Версия {} · протокол v1\nПрофиль: {}\nРеле подключено: {}\n{}\nPush API: {}\n{}", &[("0", env!("SHUM_VERSION").to_string()), ("1", safe(text(&snapshot["card"]["name"])).to_string()), ("2", relay_count(snapshot)), ("3", bluetooth_status(snapshot).to_string()), ("4", crate::terminal::push_status(snapshot).to_string()), ("5", safe(text(&snapshot["error"])).to_string())]))),
         ["/keys","verify",who]=>{let c:shum_core::card::Card=serde_json::from_value(find_contact(snapshot,who)?["card"].clone())?;return Ok(Action::Info(t("Сверка ключей").into(),crate::i18n::format("{}\n\nОтпечаток как в iPhone: {}\n\nShum ID: {}", &[("0", safe(&c.name).to_string()), ("1", crate::terminal::fingerprint(&c).to_string()), ("2", c.id().to_string())])));},
         _=>bail!("{}", t("Команда или аргументы не распознаны. /help: список и примеры")),
     };
@@ -2526,4 +2526,12 @@ pub fn nearby_label(contact: &Value) -> String {
         }
         None => t("Рядом · расстояние неизвестно").into(),
     }
+}
+
+/// Connected relays out of all the session uses, as "4/5"; cores before
+/// relayList only give the connected ones.
+fn relay_count(snapshot: &Value) -> String {
+    let connected = snapshot["relays"].as_array().map_or(0, Vec::len);
+    let all = snapshot["relayList"].as_array().map_or(0, Vec::len);
+    format!("{connected}/{}", all.max(connected))
 }
