@@ -1151,7 +1151,7 @@ fn draw_content(
         &view.status
     };
     let hint = if view.composing || view.command_mode {
-        t("Enter отправить · ^R реакция · Esc к списку · ^P профили · ^Q выход")
+        t("Enter отправить · ↑↓ история · ^R реакция · Esc к списку · ^P профили · ^Q выход")
     } else if area.width < 60 {
         t("i QR · a добавить · ^P профили · q выход")
     } else if full_empty {
@@ -1624,6 +1624,15 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
         }
         KeyCode::PageUp => view.scroll = view.scroll.saturating_add(10),
         KeyCode::PageDown => view.scroll = view.scroll.saturating_sub(10),
+        // The field is one line, so in an open chat the arrows scroll it
+        // and End comes back to the newest messages.
+        KeyCode::Up if view.composing && view.opened.is_some() => {
+            view.scroll = view.scroll.saturating_add(3)
+        }
+        KeyCode::Down if view.composing && view.opened.is_some() => {
+            view.scroll = view.scroll.saturating_sub(3)
+        }
+        KeyCode::End if view.composing && view.opened.is_some() => view.scroll = 0,
         KeyCode::Enter if editing && !view.input.is_empty() => {
             if view.input.trim() == "/react" {
                 reactions::open(view, snapshot)?;

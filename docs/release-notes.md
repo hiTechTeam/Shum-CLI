@@ -1,3 +1,22 @@
+# Shum CLI 0.1.27 · 1 November 2026
+
+* In an open chat the arrow keys scroll the conversation while you type, three lines at a time; End comes back to the newest messages. Page Up and Page Down (Fn+↑/↓ on a Mac) still move by ten.
+* Installed 0.1.26 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.21 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* В открытом чате стрелки листают переписку, пока вы печатаете, по три строки; End возвращает к новым сообщениям. Page Up и Page Down (на Mac Fn+↑/↓) по-прежнему листают по десять.
+* Установленная 0.1.26 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.21 те же изменения.
+
 # Shum CLI 0.1.26 · 1 November 2026
 
 * Shum has its own relay, `wss://relay.getshum.tech`, first in the list beside four independent Nostr relays. Profiles with the earlier default list switch on their own; a list you chose stays.

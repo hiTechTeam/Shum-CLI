@@ -288,7 +288,7 @@
   "Огонь": "Fire",
   "Гроб": "Coffin",
   "Кошмар": "Horror",
-  "Enter отправить · ^R реакция · Esc к списку · ^P профили · ^Q выход": "Enter: send · ^R: reaction · Esc: list · ^P: profiles · ^Q: quit",
+  "Enter отправить · ↑↓ история · ^R реакция · Esc к списку · ^P профили · ^Q выход": "Enter: send · ↑↓: history · ^R: reaction · Esc: list · ^P: profiles · ^Q: quit",
   "Язык интерфейса": "Interface language",
   "Показать или сохранить язык интерфейса": "Show or save the interface language",
   "Как в системе": "System default",
