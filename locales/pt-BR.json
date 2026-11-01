@@ -335,5 +335,19 @@
   "Отправить стикер Shum по имени; список: shum stickers": "Enviar uma figurinha do Shum pelo nome; lista: shum stickers",
   "Показать наборы стикеров и их имена": "Mostrar os pacotes de figurinhas e seus nomes",
   "Удалить своё сообщение; --everyone и у собеседника": "Apagar sua mensagem; --everyone também para o contato",
-  "Сохранить фото из сообщения в файл": "Salvar a foto de uma mensagem em um arquivo"
+  "Сохранить фото из сообщения в файл": "Salvar a foto de uma mensagem em um arquivo",
+  "Отправить фото; без файла откроется окно выбора": "Enviar uma foto; sem arquivo, abre o seletor",
+  "Фото": "Foto",
+  "Фото для Shum": "Foto para o Shum",
+  "Окно выбора файла недоступно. Укажите путь: /sendphoto <файл>": "O seletor de arquivos não está disponível. Informe o caminho: /sendphoto <arquivo>",
+  "Фото слишком большое": "A foto é grande demais",
+  "Файл не открыть:": "Não foi possível abrir o arquivo:",
+  "Это не фото: нужен JPEG или PNG": "Isto não é uma foto: é preciso JPEG ou PNG",
+  "HEIC здесь не открыть: сохраните фото как JPEG": "HEIC não abre aqui: salve a foto como JPEG",
+  "Фото отправлено": "Foto enviada",
+  "Фото не выбрано": "Nenhuma foto escolhida",
+  "Стикеры": "Figurinhas",
+  "Стикеры доступны после принятия приглашения": "As figurinhas ficam disponíveis após aceitar o convite",
+  "←→ набор · ↑↓ · Enter · Esc": "←→ pacote · ↑↓ · Enter · Esc",
+  "←→ набор · ↑↓ стикер · Enter: отправить · Esc: назад": "←→ pacote · ↑↓ figurinha · Enter: enviar · Esc: voltar"
 }

@@ -137,6 +137,18 @@ enum Commands {
     },
     #[command(about = t("Показать наборы стикеров и их имена"))]
     Stickers,
+    #[command(
+        name = "send-photo",
+        about = t("Отправить фото; без файла откроется окно выбора")
+    )]
+    SendPhoto {
+        #[arg(value_name = "ID")]
+        contact: String,
+        #[arg(value_name = "FILE")]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        caption: Option<String>,
+    },
     #[command(about = t("Отметить чат прочитанным"))]
     Read {
         #[arg(value_name = "ID")]
@@ -868,6 +880,21 @@ async fn run(args: Args) -> Result<()> {
             contact: contact.clone(),
             sticker: sticker.clone(),
         },
+        Some(Commands::SendPhoto {
+            contact,
+            file,
+            caption,
+        }) => {
+            let file = match file {
+                Some(file) => file.clone(),
+                None => match shum_cli::photo_out::pick()? {
+                    Some(file) => file,
+                    None => return Ok(()),
+                },
+            };
+            let photo = shum_cli::photo_out::prepare(&file)?;
+            shum_cli::photo_out::request(contact.clone(), photo, caption.as_deref().unwrap_or(""))
+        }
         Some(Commands::Stickers) => {
             // Shum's sets are in Shum-Core; no service is needed to list them.
             let sets: Value = serde_json::from_str(&shum_core::pool::sets_json())?;

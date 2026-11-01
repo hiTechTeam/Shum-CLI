@@ -11,6 +11,7 @@ pub mod ipc;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod onboarding;
+pub mod photo_out;
 pub mod runtime;
 pub mod service;
 pub mod terminal;

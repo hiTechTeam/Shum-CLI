@@ -1,3 +1,26 @@
+# Shum CLI 0.1.28 · 1 November 2026
+
+* Send photos from the terminal. In an open chat Ctrl+F or `/sendphoto` opens the system's own file dialog (Finder, Explorer, or zenity / kdialog on Linux); `/sendphoto <file> [caption]` sends a file at once. The text in the field becomes the caption. From a shell: `shum send-photo <ID> [file] [--caption text]`.
+* Photos are made small here as in the desktop app: up to 1280 px and a JPEG of at most 110 KB, turned upright. HEIC photos from an iPhone open on a Mac.
+* Choose stickers in the chat: Ctrl+T or `/sticker` shows Shum's sets with each sticker's picture; ←→ set, ↑↓ sticker, Enter sends.
+* Installed 0.1.27 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.22 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Фото можно отправлять из терминала. В открытом чате Ctrl+F или `/sendphoto` открывают системное окно выбора файла (Finder, проводник, на Linux zenity или kdialog); `/sendphoto <файл> [подпись]` отправляет файл сразу. Текст в поле становится подписью. Из обычного терминала: `shum send-photo <ID> [файл] [--caption текст]`.
+* Фото уменьшается здесь же, как в приложении для компьютера: до 1280 px и JPEG не больше 110 КБ, с правильным поворотом. HEIC с iPhone открываются на Mac.
+* Стикеры выбираются прямо в чате: Ctrl+T или `/sticker` показывают наборы Shum с картинкой каждого стикера; ←→ набор, ↑↓ стикер, Enter отправляет.
+* Установленная 0.1.27 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.22 те же изменения.
+
 # Shum CLI 0.1.27 · 1 November 2026
 
 * In an open chat the arrow keys scroll the conversation while you type, three lines at a time; End comes back to the newest messages. Page Up and Page Down (Fn+↑/↓ on a Mac) still move by ten.

@@ -28,7 +28,12 @@ pub(super) fn names() -> &'static [String] {
 
 /// The picture as RGBA bytes and its side.
 fn rgba(index: usize) -> (usize, Vec<u8>) {
-    let art = shum_core::pool::sticker(kinds()[index].name()).map(|s| &s.art);
+    rgba_of(kinds()[index].name())
+}
+
+/// Any sticker's picture, reactions and phrases alike, by its name.
+fn rgba_of(id: &str) -> (usize, Vec<u8>) {
+    let art = shum_core::pool::sticker(id).map(|s| &s.art);
     match art {
         Some(art) => (art.size, shum_core::pool::rgba(art)),
         None => (0, Vec::new()),
@@ -37,7 +42,11 @@ fn rgba(index: usize) -> (usize, Vec<u8>) {
 
 /// The colour at (x, y) of the 12 x 12 grid, taken from the nearest cell.
 pub(super) fn pixel(index: usize, x: usize, y: usize) -> Option<Color> {
-    let (side, rgba) = rgba(index);
+    pixel_of(kinds()[index].name(), x, y)
+}
+
+fn pixel_of(id: &str, x: usize, y: usize) -> Option<Color> {
+    let (side, rgba) = rgba_of(id);
     if side == 0 {
         return None;
     }
@@ -47,6 +56,11 @@ pub(super) fn pixel(index: usize, x: usize, y: usize) -> Option<Color> {
 }
 
 pub(super) fn draw(frame: &mut Frame<'_>, index: usize, area: Rect) {
+    draw_sticker(frame, kinds()[index].name(), area);
+}
+
+/// Any sticker of Shum's sets, by its name.
+pub(super) fn draw_sticker(frame: &mut Frame<'_>, id: &str, area: Rect) {
     let full = area.width >= 24 && area.height >= 12;
     let (width, height) = if full { (24, 12) } else { (12, 6) };
     if area.width < width || area.height < height {
@@ -57,7 +71,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, index: usize, area: Rect) {
     if full {
         for y in 0..12 {
             for x in 0..12 {
-                if let Some(rgb) = pixel(index, x, y) {
+                if let Some(rgb) = pixel_of(id, x, y) {
                     for dx in 0..2 {
                         frame.buffer_mut()[(x0 + x as u16 * 2 + dx, y0 + y as u16)]
                             .set_char(' ')
@@ -76,8 +90,8 @@ pub(super) fn draw(frame: &mut Frame<'_>, index: usize, area: Rect) {
                     cell.bg
                 };
                 cell.set_char('▀')
-                    .set_fg(pixel(index, x, y * 2).unwrap_or(background))
-                    .set_bg(pixel(index, x, y * 2 + 1).unwrap_or(background));
+                    .set_fg(pixel_of(id, x, y * 2).unwrap_or(background))
+                    .set_bg(pixel_of(id, x, y * 2 + 1).unwrap_or(background));
             }
         }
     }

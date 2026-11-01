@@ -189,10 +189,22 @@ fn all_pixel_reactions_render_in_rgb_indexed_and_ascii_after_resize() {
                     assert!(body.contains("Выберите реакцию"));
 
                     if !ascii && height >= 18 {
-                        let colored = buffer.content.iter().filter(|c| match colors {
-                            Colors::Rgb => matches!(c.bg, Color::Rgb(r,g,b) if r > 50 && (r != g || g != b)),
-                            Colors::Indexed => matches!(c.bg, Color::Indexed(i) if i > 16 && i < 232),
-                        }).count();
+                        // Any bright, non-grey colour counts: the 180 reactions
+                        // include green and blue ones, and half blocks colour
+                        // the foreground as well as the background.
+                        let bright = |color: Color| match colors {
+                            Colors::Rgb => {
+                                matches!(color, Color::Rgb(r, g, b) if r.max(g).max(b) > 50 && (r != g || g != b))
+                            }
+                            Colors::Indexed => {
+                                matches!(color, Color::Indexed(i) if i > 16 && i < 232)
+                            }
+                        };
+                        let colored = buffer
+                            .content
+                            .iter()
+                            .filter(|c| bright(c.bg) || bright(c.fg))
+                            .count();
                         assert!(colored > 10, "pixel artwork must be visible");
                     }
                     key(&mut view, &snapshot, KeyCode::Down).unwrap();

@@ -5,6 +5,7 @@ pub(crate) mod reaction_art;
 mod reactions;
 #[cfg(test)]
 mod render_tests;
+mod stickers;
 
 use crate::i18n::t;
 use crate::{
@@ -55,6 +56,7 @@ pub struct View {
     form: Option<Form>,
     reactions: Option<reactions::Picker>,
     photos: Option<photos::Picker>,
+    stickers: Option<stickers::Picker>,
     languages: Option<usize>,
     chat_rows: Vec<(Rect, String)>,
     /// Photos read so far: a new one redraws the pictures.
@@ -585,7 +587,7 @@ fn draw_content(
             " Shum  {}   реле {relay}   рядом {nearby}   {}",
             &[
                 ("0", safe(text(&snapshot["card"]["name"])).to_string()),
-                ("relay", format!("{}", relay)),
+                ("relay", relay),
                 ("nearby", format!("{}", nearby)),
                 ("1", format!("{}", chrono::Local::now().format("%H:%M"))),
             ],
@@ -1341,6 +1343,7 @@ fn draw_content(
     }
     reactions::draw(frame, snapshot, view, ascii);
     photos::draw(frame, snapshot, view, ascii);
+    stickers::draw(frame, view, ascii);
     languages::draw(frame, view, ascii);
     if let Some(form) = &view.form {
         let title = match form {
@@ -1415,6 +1418,8 @@ fn shortcut(code: KeyCode) -> KeyCode {
             'в' => 'd',
             'к' => 'r',
             'д' => 'l',
+            'а' => 'f',
+            'е' => 't',
             _ => c,
         }),
         _ => code,
@@ -1437,6 +1442,13 @@ pub enum Action {
     Info(String, String),
     /// Saves a message's photo to this path and opens it.
     SavePhoto(String, std::path::PathBuf),
+    /// Sends a photo to the chat: the file, or one picked in the system's
+    /// dialog, with the text as caption.
+    SendPhoto {
+        contact: String,
+        path: Option<std::path::PathBuf>,
+        caption: String,
+    },
 }
 fn open_contact(view: &mut View, id: String) {
     view.opened = Some(id);
@@ -1468,6 +1480,9 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
     if view.photos.is_some() {
         return photos::handle(view, snapshot, key);
     }
+    if view.stickers.is_some() {
+        return stickers::handle(view, key);
+    }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return Ok(match shortcut(key.code) {
             KeyCode::Char('o')
@@ -1492,6 +1507,35 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
                 reactions::open(view, snapshot)?;
                 view.input = draft;
                 view.command_mode = command_mode;
+                Action::None
+            }
+            KeyCode::Char('f')
+                if view.qr.is_none()
+                    && !view.help
+                    && view.info.is_none()
+                    && view.form.is_none()
+                    && view.profiles.is_none() =>
+            {
+                let contact = view.opened.clone().context(t("Сначала откройте чат"))?;
+                let caption = if view.command_mode {
+                    String::new()
+                } else {
+                    view.input.clone()
+                };
+                Action::SendPhoto {
+                    contact,
+                    path: None,
+                    caption,
+                }
+            }
+            KeyCode::Char('t')
+                if view.qr.is_none()
+                    && !view.help
+                    && view.info.is_none()
+                    && view.form.is_none()
+                    && view.profiles.is_none() =>
+            {
+                stickers::open(view, snapshot)?;
                 Action::None
             }
             KeyCode::Char('l')
@@ -1638,6 +1682,11 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
                 reactions::open(view, snapshot)?;
                 return Ok(Action::None);
             }
+            if view.input.trim() == "/sticker" {
+                stickers::open(view, snapshot)?;
+                view.input.clear();
+                return Ok(Action::None);
+            }
             if view.input.trim() == "/photo" {
                 photos::open(view, snapshot)?;
                 view.input.clear();
@@ -1724,6 +1773,7 @@ fn parse_command(input: &str, current: Option<&str>, snapshot: &Value) -> Result
         ["/block",who]=>Request::Block{contact:contact(Some(who))?,blocked:true},
         ["/block",who,"--undo"]=>Request::Block{contact:contact(Some(who))?,blocked:false},
         ["/cancel",message]=>Request::Cancel{message:(*message).into()},
+        ["/sendphoto",rest @ ..]=>{let path=rest.first().map(|p|expand_home(p)).filter(|p|p.is_file());let caption=rest[usize::from(path.is_some())..].join(" ");return Ok(Action::SendPhoto{contact:contact(None)?,path,caption});},
         ["/react",message,reaction]=>Request::Reaction{message:(*message).into(),reaction:serde_json::from_value(Value::String((*reaction).into())).context(t("Реакция: heart like dislike laugh fire coffin hundred horror"))?},
         ["/profile","name",name @ ..] if !name.is_empty()=>Request::Profile{name:Some(name.join(" ")),bio:None,seed:None},
         ["/profile","bio",bio @ ..]=>Request::Profile{name:None,bio:Some(bio.join(" ")),seed:None},
@@ -2244,11 +2294,32 @@ async fn run_loop(
                     Action::SavePhoto(_, path) => {
                         Some(format!("{} {}", t("Фото сохранено:"), path.display()))
                     }
+                    Action::SendPhoto { .. } => Some(t("Фото отправлено").into()),
                     _ => None,
                 };
                 let task = tokio::spawn(async move {
                     match action {
                         Action::Request(request) => {
+                            ipc::request(&root, &current, request).await?;
+                            Ok(None)
+                        }
+                        Action::SendPhoto {
+                            contact,
+                            path,
+                            caption,
+                        } => {
+                            let request = tokio::task::spawn_blocking(move || -> Result<_> {
+                                let path = match path {
+                                    Some(path) => path,
+                                    // Closing the dialog keeps the draft.
+                                    None => {
+                                        crate::photo_out::pick()?.context(t("Фото не выбрано"))?
+                                    }
+                                };
+                                let photo = crate::photo_out::prepare(&path)?;
+                                Ok(crate::photo_out::request(contact, photo, &caption))
+                            })
+                            .await??;
                             ipc::request(&root, &current, request).await?;
                             Ok(None)
                         }
@@ -2333,6 +2404,11 @@ fn help_text() -> String {
         ("Ctrl+L / /language", t("Язык интерфейса")),
         ("Ctrl+R / /react", t("Выберите сообщение")),
         ("Ctrl+O / /photo", t("Фото в чате")),
+        ("Ctrl+T / /sticker", t("Стикеры")),
+        (
+            "Ctrl+F / /sendphoto [file] [caption]",
+            t("Отправить фото; без файла откроется окно выбора"),
+        ),
         ("i / /qr", t("Мой QR · Esc закрыть")),
         (
             "a / /add <link> / /add --image <png>",
@@ -2543,4 +2619,12 @@ fn relay_count(snapshot: &Value) -> String {
     let connected = snapshot["relays"].as_array().map_or(0, Vec::len);
     let all = snapshot["relayList"].as_array().map_or(0, Vec::len);
     format!("{connected}/{}", all.max(connected))
+}
+
+/// A path typed in the chat; "~/" means the home folder, as in a shell.
+fn expand_home(path: &str) -> std::path::PathBuf {
+    match (path.strip_prefix("~/"), directories::UserDirs::new()) {
+        (Some(rest), Some(dirs)) => dirs.home_dir().join(rest),
+        _ => std::path::PathBuf::from(path),
+    }
 }

@@ -400,3 +400,52 @@ fn a_sticker_shows_as_its_picture_in_the_history() {
         "the sticker is drawn, not only named: {painted}"
     );
 }
+#[test]
+fn ctrl_t_opens_the_stickers_with_the_set_and_a_picture() {
+    let snapshot = fixture();
+    let mut view = View::chat(PEER);
+    let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
+    handle_key(&mut view, &snapshot, ctrl_t).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    let mut pictures = pictures();
+    terminal
+        .draw(|f| draw(f, &snapshot, &mut view, &mut pictures, false))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let screen: String = buffer.content.iter().map(|c| c.symbol()).collect();
+    let set = shum_core::stickers::SETS[0].title;
+    assert!(screen.contains(crate::i18n::t(set)), "the set is named");
+    let painted = buffer
+        .content
+        .iter()
+        .filter(|c| c.bg != ratatui::style::Color::Reset && c.symbol() == " ")
+        .count();
+    assert!(painted > 20, "the sticker is drawn: {painted}");
+}
+#[test]
+fn sendphoto_takes_a_path_and_the_rest_as_caption() {
+    let snapshot = fixture();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("sea.jpg");
+    std::fs::write(&file, b"x").unwrap();
+    let input = format!("/sendphoto {} на море", file.display());
+    match parse_command(&input, Some(PEER), &snapshot).unwrap() {
+        Action::SendPhoto {
+            contact,
+            path,
+            caption,
+        } => {
+            assert_eq!(contact, PEER);
+            assert_eq!(path.as_deref(), Some(file.as_path()));
+            assert_eq!(caption, "на море");
+        }
+        _ => panic!("a photo is sent"),
+    }
+    match parse_command("/sendphoto на море", Some(PEER), &snapshot).unwrap() {
+        Action::SendPhoto { path, caption, .. } => {
+            assert!(path.is_none(), "without a file the system's dialog opens");
+            assert_eq!(caption, "на море");
+        }
+        _ => panic!("a photo is sent"),
+    }
+}
