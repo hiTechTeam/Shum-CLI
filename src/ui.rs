@@ -61,6 +61,9 @@ pub struct View {
     chat_rows: Vec<(Rect, String)>,
     /// Photos read so far: a new one redraws the pictures.
     photos_loaded: usize,
+    /// The tab and the chats as last drawn, so the selection follows its
+    /// chat when a new message moves it up.
+    shown: (usize, Vec<String>),
 }
 impl View {
     pub fn chat(id: &str) -> Self {
@@ -404,8 +407,20 @@ impl Pictures {
         }
     }
 }
+/// The chats of a tab, the latest message or event first, the way every
+/// Shum client lists them.
 fn contacts(snapshot: &Value, tab: usize) -> Vec<&Value> {
-    snapshot["contacts"]
+    let mut latest: HashMap<&str, i64> = HashMap::new();
+    for item in ["messages", "events"]
+        .into_iter()
+        .flat_map(|list| snapshot[list].as_array().into_iter().flatten())
+    {
+        if let (Some(id), Some(time)) = (item["contactID"].as_str(), item["timestamp"].as_i64()) {
+            let entry = latest.entry(id).or_insert(time);
+            *entry = (*entry).max(time);
+        }
+    }
+    let mut listed: Vec<&Value> = snapshot["contacts"]
         .as_array()
         .into_iter()
         .flatten()
@@ -415,7 +430,35 @@ fn contacts(snapshot: &Value, tab: usize) -> Vec<&Value> {
             3 => c["unread"].as_u64().unwrap_or(0) > 0,
             _ => true,
         })
-        .collect()
+        .collect();
+    let time = |c: &Value| {
+        c["id"]
+            .as_str()
+            .and_then(|id| latest.get(id))
+            .copied()
+            .unwrap_or(0)
+    };
+    listed.sort_by_key(|c| std::cmp::Reverse(time(c)));
+    listed
+}
+
+/// Keeps the selection on the chat it was on when the list order changes,
+/// and remembers the order now shown.
+fn follow_selection(view: &mut View, listed: &[&Value]) {
+    let (tab, shown) = &view.shown;
+    if *tab == view.tab {
+        if let Some(i) = shown
+            .get(view.selected)
+            .and_then(|id| listed.iter().position(|c| c["id"].as_str() == Some(id)))
+        {
+            view.selected = i;
+        }
+    }
+    view.selected = view.selected.min(listed.len().saturating_sub(1));
+    view.shown = (
+        view.tab,
+        listed.iter().map(|c| text(&c["id"]).to_owned()).collect(),
+    );
 }
 fn find_contact<'a>(snapshot: &'a Value, selector: &str) -> Result<&'a Value> {
     crate::terminal::find_contact(snapshot, selector)
@@ -622,7 +665,7 @@ fn draw_content(
     frame.render_widget(Paragraph::new(Line::from(tabs)), vertical[1]);
     view.chat_rows.clear();
     let listed = contacts(snapshot, view.tab);
-    view.selected = view.selected.min(listed.len().saturating_sub(1));
+    follow_selection(view, &listed);
     let full_empty = listed.is_empty() && view.opened.is_none();
     let columns = if pictures.cell_avatars() && !ascii && area.width >= 80 {
         Layout::horizontal([
@@ -1700,7 +1743,9 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
             return Ok(action);
         }
         KeyCode::Enter => {
-            if let Some(c) = contacts(snapshot, view.tab).get(view.selected) {
+            let listed = contacts(snapshot, view.tab);
+            follow_selection(view, &listed);
+            if let Some(c) = listed.get(view.selected) {
                 open_contact(view, text(&c["id"]).into());
             }
         }
@@ -1727,10 +1772,14 @@ pub fn handle_key(view: &mut View, snapshot: &Value, key: KeyEvent) -> Result<Ac
                 view.command_mode = true;
             }
             KeyCode::Char(c @ '1'..='4') => return Ok(Action::Tab((c as u8 - b'1') as usize)),
-            KeyCode::Up | KeyCode::Char('k') => view.selected = view.selected.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => {
+                follow_selection(view, &contacts(snapshot, view.tab));
+                view.selected = view.selected.saturating_sub(1);
+            }
             KeyCode::Down | KeyCode::Char('j') => {
-                view.selected =
-                    (view.selected + 1).min(contacts(snapshot, view.tab).len().saturating_sub(1))
+                let listed = contacts(snapshot, view.tab);
+                follow_selection(view, &listed);
+                view.selected = (view.selected + 1).min(listed.len().saturating_sub(1));
             }
             _ => {}
         },

@@ -449,3 +449,62 @@ fn sendphoto_takes_a_path_and_the_rest_as_caption() {
         _ => panic!("a photo is sent"),
     }
 }
+
+#[test]
+fn a_new_message_moves_its_chat_up_and_the_selection_stays_on_its_chat() {
+    let anya = "a".repeat(64);
+    let boris = "b".repeat(64);
+    let mut snapshot = json!({"profile":{"ownerId":"me"},"card":{"name":"Me"},
+        "contacts":[
+            {"id":anya,"phase":"accepted","card":{"name":"Anya"}},
+            {"id":boris,"phase":"accepted","card":{"name":"Boris"}}],
+        "messages":[
+            {"id":"1","contactID":anya,"text":"hi","outgoing":false,"timestamp":2000,"status":"delivered"},
+            {"id":"2","contactID":boris,"text":"hey","outgoing":false,"timestamp":1000,"status":"delivered"}]});
+    let ids = |snapshot: &Value| -> Vec<String> {
+        contacts(snapshot, 0)
+            .iter()
+            .map(|c| text(&c["id"]).to_owned())
+            .collect()
+    };
+    assert_eq!(ids(&snapshot), [anya.clone(), boris.clone()]);
+    let mut view = View::default();
+    let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+    handle_key(&mut view, &snapshot, down).unwrap();
+    assert_eq!(view.selected, 1, "Boris is selected");
+    snapshot["messages"].as_array_mut().unwrap().push(
+        json!({"id":"3","contactID":boris,"text":"new","outgoing":false,"timestamp":3000,"status":"delivered"}),
+    );
+    assert_eq!(
+        ids(&snapshot),
+        [boris.clone(), anya.clone()],
+        "the newest chat is first"
+    );
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    handle_key(&mut view, &snapshot, enter).unwrap();
+    assert_eq!(
+        view.opened.as_deref(),
+        Some(boris.as_str()),
+        "Enter opens the chat that was selected"
+    );
+}
+
+#[test]
+fn an_invitation_takes_its_place_in_the_queue_like_a_message() {
+    let anya = "a".repeat(64);
+    let vera = "c".repeat(64);
+    let snapshot = json!({"profile":{"ownerId":"me"},"card":{"name":"Me"},
+        "contacts":[
+            {"id":anya,"phase":"accepted","card":{"name":"Anya"}},
+            {"id":vera,"phase":"incomingPending","card":{"name":"Vera"}}],
+        "messages":[
+            {"id":"1","contactID":anya,"text":"hi","outgoing":false,"timestamp":2000,"status":"delivered"}],
+        "events":[
+            {"id":"invitation:c:1","contactID":vera,"timestamp":3000,"kind":"invitationReceived"}]});
+    let first = contacts(&snapshot, 0)[0]["id"].clone();
+    assert_eq!(
+        first,
+        json!(vera),
+        "the newer invitation comes before the older chat"
+    );
+}

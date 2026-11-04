@@ -1,3 +1,26 @@
+# Shum CLI 0.1.29 · 4 November 2026
+
+* Chats form one queue: the chat with the latest message or invitation comes first, as in the app on the phone and the desktop. The selection stays on its chat when a new message moves another one up.
+* Delivery holds up better: relays stay connected and are asked again every three minutes, and a message the relay took goes out again until the other side confirms it.
+* When you accept an invitation, the person who sent it gets a notification on their iPhone.
+* Installed 0.1.28 updates to this version on its own.
+
+macOS 15+ on Apple Silicon. Linux with glibc 2.35+. Windows preview 0.1.23 carries the same changes.
+
+```sh
+brew update
+brew upgrade shum
+```
+
+## Русский
+
+* Чаты идут очередью: первым стоит чат с самым свежим сообщением или приглашением, как в приложении на телефоне и на компьютере. Выделение остаётся на своём чате, когда новое сообщение поднимает другой.
+* Доставка стала надёжнее: реле не отключаются и опрашиваются заново каждые три минуты, а сообщение, принятое реле, уходит снова, пока собеседник его не подтвердит.
+* Когда вы принимаете приглашение, отправитель получает уведомление на iPhone.
+* Установленная 0.1.28 обновится до этой версии сама.
+
+macOS 15+ на Apple Silicon. Linux с glibc 2.35+. В превью для Windows 0.1.23 те же изменения.
+
 # Shum CLI 0.1.28 · 1 November 2026
 
 * Send photos from the terminal. In an open chat Ctrl+F or `/sendphoto` opens the system's own file dialog (Finder, Explorer, or zenity / kdialog on Linux); `/sendphoto <file> [caption]` sends a file at once. The text in the field becomes the caption. From a shell: `shum send-photo <ID> [file] [--caption text]`.
