@@ -190,7 +190,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. A profile works on several devices at once: iPhone, the desktop app, Shum Web and other computers. Windows and Linux builds are previews.
+CLI and Core are separate repositories and releases. Core dependencies pin one Git revision. CI runs manually. A profile moves between iPhone, the desktop app, Shum Web and other computers through a backup; linking several devices to one profile is planned for v1 stable. Windows and Linux builds are previews.
 
 What changed in each version is in [Releases](https://github.com/hiTechTeam/Shum-CLI/releases).
 
